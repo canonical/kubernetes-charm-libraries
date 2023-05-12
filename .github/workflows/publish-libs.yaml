@@ -1,0 +1,18 @@
+name: Publish Libs
+
+on:
+  workflow_call:
+
+jobs:
+  publish-libs:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Install charmcraft
+        run: sudo snap install charmcraft --classic
+      - name: Publish libs
+        env:
+          CHARMCRAFT_AUTH: "${{ secrets.CHARMCRAFT_AUTH }}"
+        run: |
+          charmcraft publish-lib charms.kubernetes_charm_libraries.v0.multus
