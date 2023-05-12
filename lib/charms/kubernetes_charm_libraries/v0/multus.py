@@ -5,7 +5,7 @@
 
 - On charm installation, it will:
   - Create the requested network attachment definitions
-  - Patch the statefultset with the necessary annotations for the container to have interfaces
+  - Patch the statefulset with the necessary annotations for the container to have interfaces
     that use those new network attachments.
 - On charm removal, it will:
   - Delete the created network attachment definitions
@@ -327,7 +327,7 @@ class KubernetesMultusCharmLib(Object):
         kubernetes_multus = KubernetesMultus(namespace=self.model.name)
         for network_attachment_definition in self.network_attachment_definitions:
             if not kubernetes_multus.network_attachment_definition_is_created(
-                name=network_attachment_definition.metadata.name  # type: ignore[union-attr]  # noqa: E501
+                name=network_attachment_definition.metadata.name  # type: ignore[union-attr]
             ):
                 kubernetes_multus.create_network_attachment_definition(
                     network_attachment_definition=network_attachment_definition
@@ -352,8 +352,8 @@ class KubernetesMultusCharmLib(Object):
         kubernetes_multus = KubernetesMultus(namespace=self.model.name)
         for network_attachment_definition in self.network_attachment_definitions:
             if kubernetes_multus.network_attachment_definition_is_created(
-                name=network_attachment_definition.metadata.name  # type: ignore[union-attr]  # noqa: E501
+                name=network_attachment_definition.metadata.name  # type: ignore[union-attr]
             ):
                 kubernetes_multus.delete_network_attachment_definition(
-                    name=network_attachment_definition.metadata.name  # type: ignore[union-attr]  # noqa: E501
+                    name=network_attachment_definition.metadata.name  # type: ignore[union-attr]
                 )
