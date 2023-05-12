@@ -1,0 +1,7 @@
+name: kubernetes-charm-libraries
+
+display-name: Kubernetes Charm Libraries
+
+summary: A Placeholder charm
+
+description: A Placeholder charm for hosting Kubernetes charm libraries
