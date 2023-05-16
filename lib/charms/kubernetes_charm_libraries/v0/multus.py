@@ -153,8 +153,8 @@ class Kubernetes:
         except ApiError:
             raise KubernetesMultusError(f"Could not get statefulset {statefulset_name}")
         containers = statefulset.spec.template.spec.containers  # type: ignore[attr-defined]
-        for i in range(len(containers)):
-            if containers[i].name == container_name:
+        for i, container in enumerate(containers):
+            if container.name == container_name:
                 return i
         raise KubernetesMultusError(f"No container named {container_name} in statefulset")
 
