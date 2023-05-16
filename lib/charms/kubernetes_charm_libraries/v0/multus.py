@@ -348,7 +348,9 @@ class KubernetesMultusCharmLib(Object):
         self.network_annotations = network_annotations
         self.containers_requiring_net_admin_capability = (
             containers_requiring_net_admin_capability
-        ) if containers_requiring_net_admin_capability else []
+            if containers_requiring_net_admin_capability
+            else []
+        )
         self.framework.observe(charm.on.install, self._configure_multus)
         self.framework.observe(charm.on.upgrade_charm, self._configure_multus)
         self.framework.observe(charm.on.remove, self._on_remove)
