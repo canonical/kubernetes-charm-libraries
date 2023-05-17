@@ -3,7 +3,7 @@
 
 """Charm Library used to leverage the Multus Kubernetes CNI in charms.
 
-- On charm installation, it will:
+- On config-changed, it will:
   - Create the requested network attachment definitions
   - Patch the statefulset with the necessary annotations for the container to have interfaces
     that use those new network attachments.
@@ -26,62 +26,54 @@ class YourCharm(CharmBase):
         super().__init__(*args)
         self._kubernetes_multus = KubernetesMultusCharmLib(
             charm=self,
+            containers_requiring_net_admin_capability=[self._bessd_container_name],
             network_attachment_definitions=[
                 NetworkAttachmentDefinition(
-                    metadata=ObjectMeta(name="access-net"),
-                    spec={
-                        "config": json.dumps(
-                            {
-                                "cniVersion": "0.3.1",
-                                "type": "macvlan",
-                                "ipam": {"type": "static"},
-                                "capabilities": {"mac": True},
-                            }
-                        )
-                    }
+                    metadata=ObjectMeta(name=ACCESS_NETWORK_ATTACHMENT_DEFINITION_NAME),
+                    spec=network_attachment_definition_spec,
                 ),
                 NetworkAttachmentDefinition(
-                    metadata=ObjectMeta(name="core-net"),
-                    spec={
-                        "config": json.dumps(
-                            {
-                                "cniVersion": "0.3.1",
-                                "type": "macvlan",
-                                "ipam": {"type": "static"},
-                                "capabilities": {"mac": True},
-                            }
-                        )
-                    }
+                    metadata=ObjectMeta(name=CORE_NETWORK_ATTACHMENT_DEFINITION_NAME),
+                    spec=network_attachment_definition_spec,
                 ),
             ],
-            network_annotations=[
-                NetworkAnnotation(
-                    name="access-net",
-                    interface="access",
-                    ips=[self._access_network_ip],
-                ),
-                NetworkAnnotation(
-                    name="core-net",
-                    interface="core",
-                    ips=[self._core_network_ip],
-                ),
-            ],
+            network_annotations_func=self._network_annotations_from_config,
         )
+
+    def _network_annotations_from_config(self) -> list[NetworkAnnotation]:
+        return [
+            NetworkAnnotation(
+                name=ACCESS_NETWORK_ATTACHMENT_DEFINITION_NAME,
+                interface=ACCESS_INTERFACE_NAME,
+                ips=[self._get_access_network_ip_config()],
+            ),
+            NetworkAnnotation(
+                name=CORE_NETWORK_ATTACHMENT_DEFINITION_NAME,
+                interface=CORE_INTERFACE_NAME,
+                ips=[self._get_core_network_ip_config()],
+            ),
+        ]
 ```
 """
 
 import json
 import logging
-import signal
-import sys
 from dataclasses import asdict, dataclass
-from typing import Optional
+from typing import Callable, Optional
 
 import httpx
 from lightkube import Client
 from lightkube.core.exceptions import ApiError
 from lightkube.generic_resource import GenericNamespacedResource, create_namespaced_resource
-from lightkube.models.core_v1 import Capabilities
+from lightkube.models.apps_v1 import StatefulSetSpec
+from lightkube.models.core_v1 import (
+    Capabilities,
+    Container,
+    PodSpec,
+    PodTemplateSpec,
+    SecurityContext,
+)
+from lightkube.models.meta_v1 import ObjectMeta
 from lightkube.resources.apps_v1 import StatefulSet
 from lightkube.types import PatchType
 from ops.charm import CharmBase, EventBase, RemoveEvent
@@ -127,36 +119,12 @@ class KubernetesMultusError(Exception):
         super().__init__(self.message)
 
 
-class Kubernetes:
+class KubernetesClient:
     """Class containing all the Kubernetes specific calls."""
 
     def __init__(self, namespace: str):
         self.client = Client()
         self.namespace = namespace
-
-    def get_container_index_from_name(self, statefulset_name: str, container_name: str) -> int:
-        """Returns index of container matching name.
-
-        Args:
-            statefulset_name: Statefulset name
-            container_name: Container name
-
-        Returns:
-            int: Container index
-        """
-        try:
-            statefulset = self.client.get(
-                res=StatefulSet,
-                name=statefulset_name,
-                namespace=self.namespace,
-            )
-        except ApiError:
-            raise KubernetesMultusError(f"Could not get statefulset {statefulset_name}")
-        containers = statefulset.spec.template.spec.containers  # type: ignore[attr-defined]
-        for i, container in enumerate(containers):
-            if container.name == container_name:
-                return i
-        raise KubernetesMultusError(f"No container named {container_name} in statefulset")
 
     def network_attachment_definition_is_created(self, name: str) -> bool:
         """Returns whether a NetworkAttachmentDefinition is created.
@@ -233,11 +201,11 @@ class Kubernetes:
         network_annotations: list[NetworkAnnotation],
         containers_requiring_net_admin_capability: list[str],
     ) -> None:
-        """Patches a statefulset with multus annotation.
+        """Patches a statefulset with Multus annotation and NET_ADMIN capability.
 
         Args:
             name: Statefulset name
-            network_annotations: list of network annotations
+            network_annotations: List of network annotations
             containers_requiring_net_admin_capability: Containers requiring NET_ADMIN capability
         """
         if not network_annotations:
@@ -247,44 +215,51 @@ class Kubernetes:
             statefulset = self.client.get(res=StatefulSet, name=name, namespace=self.namespace)
         except ApiError:
             raise KubernetesMultusError(f"Could not get statefulset {name}")
-        statefulset.spec.template.metadata.annotations["k8s.v1.cni.cncf.io/networks"] = json.dumps(  # type: ignore[attr-defined]  # noqa: E501
-            [network_annotation.dict() for network_annotation in network_annotations]
+        statefulset_delta = StatefulSet(
+            spec=StatefulSetSpec(
+                selector=statefulset.spec.selector,  # type: ignore[attr-defined]
+                serviceName=statefulset.spec.serviceName,  # type: ignore[attr-defined]
+                template=PodTemplateSpec(
+                    metadata=ObjectMeta(
+                        annotations={
+                            "k8s.v1.cni.cncf.io/networks": json.dumps(
+                                [
+                                    network_annotation.dict()
+                                    for network_annotation in network_annotations
+                                ]
+                            )
+                        }
+                    ),
+                    spec=PodSpec(
+                        containers=[
+                            Container(
+                                name=container_name,
+                                securityContext=SecurityContext(
+                                    capabilities=Capabilities(
+                                        add=[
+                                            "NET_ADMIN",
+                                        ]
+                                    )
+                                ),
+                            )
+                            for container_name in containers_requiring_net_admin_capability
+                        ]
+                    ),
+                ),
+            )
         )
-        for container_name in containers_requiring_net_admin_capability:
-            container_index = self.get_container_index_from_name(
-                statefulset_name=name, container_name=container_name
-            )
-            statefulset.spec.template.spec.containers[  # type: ignore[attr-defined]
-                container_index
-            ].securityContext.capabilities = Capabilities(
-                add=[
-                    "NET_ADMIN",
-                ]
-            )
-        # Add a handler for SIGTERM prior to patching. Juju tries to send a SIGTERM to the CRI to
-        # exit gracefully when in CAAS mode, then the hook is re-executed, so we can "safely"
-        # trap it here without causing a hook failure if there is a race, and the install hook
-        # will retry (after it is applied and the pod is rescheduled)
-        signal.signal(signal.SIGTERM, self._handle_pod_termination)
         try:
             self.client.patch(
                 res=StatefulSet,
                 name=name,
-                obj=statefulset,
-                patch_type=PatchType.MERGE,
+                obj=statefulset_delta,
+                patch_type=PatchType.APPLY,
                 namespace=self.namespace,
+                field_manager=self.__class__.__name__,
             )
         except ApiError:
             raise KubernetesMultusError(f"Could not patch statefulset {name}")
-        logger.info(f"Multus annotation added to {name} Statefulset")
-
-    def _handle_pod_termination(self, *args) -> None:
-        logger.debug(
-            "KubernetesMultus's signal handler caught a SIGTERM, likely due to "
-            "pod termination during execution of `install` event hook. Exiting gracefully. "
-            "The hook being executed will be re-run by Juju once the pod is re-scheduled."
-        )
-        sys.exit(0)
+        logger.info(f"Multus annotation added to {name} statefulset")
 
     def statefulset_is_patched(
         self,
@@ -314,20 +289,13 @@ class Kubernetes:
         ) != [network_annotation.dict() for network_annotation in network_annotations]:
             logger.info("Existing annotation are not identical to the expected ones")
             return False
-        for container_name in containers_requiring_net_admin_capability:
-            container_index = self.get_container_index_from_name(
-                statefulset_name=name, container_name=container_name
-            )
-            if (
-                "NET_ADMIN"
-                not in statefulset.spec.template.spec.containers[  # type: ignore[attr-defined]
-                    container_index
-                ].securityContext.capabilities.add
-            ):
-                logger.info(
-                    f"The NET_ADMIN capability is not added to the container {container_name}"
-                )
-                return False
+        for container in statefulset.spec.template.spec.containers:  # type: ignore[attr-defined]
+            if container.name in containers_requiring_net_admin_capability:
+                if "NET_ADMIN" not in container.securityContext.capabilities.add:
+                    logger.info(
+                        f"The NET_ADMIN capability is not added to the container {container.name}"
+                    )
+                    return False
         logger.info("Multus annotation already added to statefulset")
         return True
 
@@ -339,20 +307,29 @@ class KubernetesMultusCharmLib(Object):
         self,
         charm: CharmBase,
         network_attachment_definitions: list[GenericNamespacedResource],
-        network_annotations: list[NetworkAnnotation],
+        network_annotations_func: Callable[[], list[NetworkAnnotation]],
         containers_requiring_net_admin_capability: Optional[list[str]] = None,
     ):
+        """Constructor for the KubernetesMultusCharmLib.
+
+        Args:
+            charm: Charm object
+            network_attachment_definitions: List of `NetworkAttachmentDefinition` to be created.
+            network_annotations_func: A callable to a function returning a list of
+                NetworkAnnotation.
+            containers_requiring_net_admin_capability: List of containers requiring the "NET_ADMIN"
+                capability.
+        """
         super().__init__(charm, "kubernetes-multus")
-        self.kubernetes = Kubernetes(namespace=self.model.name)
+        self.kubernetes = KubernetesClient(namespace=self.model.name)
         self.network_attachment_definitions = network_attachment_definitions
-        self.network_annotations = network_annotations
+        self.network_annotations_func = network_annotations_func
         self.containers_requiring_net_admin_capability = (
             containers_requiring_net_admin_capability
             if containers_requiring_net_admin_capability
             else []
         )
-        self.framework.observe(charm.on.install, self._configure_multus)
-        self.framework.observe(charm.on.upgrade_charm, self._configure_multus)
+        self.framework.observe(charm.on.config_changed, self._configure_multus)
         self.framework.observe(charm.on.remove, self._on_remove)
 
     def _configure_multus(self, event: EventBase) -> None:
@@ -368,14 +345,15 @@ class KubernetesMultusCharmLib(Object):
                 self.kubernetes.create_network_attachment_definition(
                     network_attachment_definition=network_attachment_definition
                 )
+        network_annotations = self.network_annotations_func()
         if not self.kubernetes.statefulset_is_patched(
             name=self.model.app.name,
-            network_annotations=self.network_annotations,
+            network_annotations=network_annotations,
             containers_requiring_net_admin_capability=self.containers_requiring_net_admin_capability,  # noqa: E501
         ):
             self.kubernetes.patch_statefulset(
                 name=self.model.app.name,
-                network_annotations=self.network_annotations,
+                network_annotations=network_annotations,
                 containers_requiring_net_admin_capability=self.containers_requiring_net_admin_capability,  # noqa: E501
             )
 
@@ -390,9 +368,10 @@ class KubernetesMultusCharmLib(Object):
                 name=network_attachment_definition.metadata.name  # type: ignore[union-attr]
             ):
                 return False
+        network_annotations = self.network_annotations_func()
         if not self.kubernetes.statefulset_is_patched(
             name=self.model.app.name,
-            network_annotations=self.network_annotations,
+            network_annotations=network_annotations,
             containers_requiring_net_admin_capability=self.containers_requiring_net_admin_capability,  # noqa: E501
         ):
             return False
