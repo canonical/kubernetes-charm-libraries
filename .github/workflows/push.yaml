@@ -19,10 +19,14 @@ jobs:
       [lint-report, static-analysis, unit-tests]
     if: ${{ github.ref_name == 'main' }}
     uses: ./.github/workflows/publish-charm.yaml
+    secrets:
+      CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
 
   publish-libs:
-    name: Publish libraries
+    name: Publish Libraries
     needs:
-      [lint-report, static-analysis, unit-tests, publish-charm]
+      [ publish-charm ]
     if: ${{ github.ref_name == 'main' }}
     uses: ./.github/workflows/publish-libs.yaml
+    secrets:
+      CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
