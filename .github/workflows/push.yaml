@@ -1,0 +1,35 @@
+name: CI workflow
+
+on:
+  push:
+    branches:
+      - 'main'
+  pull_request:
+
+jobs:
+  lint-report:
+    uses: ./.github/workflows/lint-report.yaml
+
+  static-analysis:
+    uses: ./.github/workflows/static-analysis.yaml
+
+  unit-tests:
+    uses: ./.github/workflows/unit-tests.yaml
+
+  publish-charm:
+    name: Publish Charm
+    needs:
+      [lint-report, static-analysis, unit-tests]
+    if: ${{ github.ref_name == 'main' }}
+    uses: ./.github/workflows/publish-charm.yaml
+    secrets:
+      CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
+
+  publish-libs:
+    name: Publish Libraries
+    needs:
+      [ publish-charm ]
+    if: ${{ github.ref_name == 'main' }}
+    uses: ./.github/workflows/publish-libs.yaml
+    secrets:
+      CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
