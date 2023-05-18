@@ -145,7 +145,7 @@ class KubernetesClient:
             logger.info(f"NetworkAttachmentDefinition {name} already created")
             return True
         except ApiError as e:
-           if e.status.reason != "NotFound":
+            if e.status.reason != "NotFound":
                 raise KubernetesMultusError(
                     f"Unexpected outcome when retrieving network attachment definition {name}"
                 )
