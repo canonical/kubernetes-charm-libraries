@@ -395,7 +395,8 @@ class KubernetesMultusCharmLib(Object):
                 containers_requiring_net_admin_capability=self.containers_requiring_net_admin_capability,  # noqa: E501
             )
 
-    def _network_attachment_definitions_are_created(self):
+    def _network_attachment_definitions_are_created(self) -> bool:
+        """Returns whether all network attachment definitions are created."""
         for network_attachment_definition in self.network_attachment_definitions:
             if not self.kubernetes.network_attachment_definition_is_created(
                 name=network_attachment_definition.metadata.name  # type: ignore[union-attr]
@@ -404,6 +405,7 @@ class KubernetesMultusCharmLib(Object):
         return True
 
     def _statefulset_is_patched(self) -> bool:
+        """Returns whether statefuset is patched with network annotations and capabilities."""
         return self.kubernetes.statefulset_is_patched(
             name=self.model.app.name,
             network_annotations=self.network_annotations_func(),
@@ -411,7 +413,7 @@ class KubernetesMultusCharmLib(Object):
         )
 
     def _pod_is_ready(self) -> bool:
-        """Returns whether pod is ready."""
+        """Returns whether pod is ready with network annotations and capabilities."""
         return self.kubernetes.pod_is_ready(
             containers_requiring_net_admin_capability=self.containers_requiring_net_admin_capability,  # noqa: E501
             pod_name=self._pod,
@@ -419,7 +421,15 @@ class KubernetesMultusCharmLib(Object):
         )
 
     def is_ready(self) -> bool:
-        """Returns whether Multus is ready."""
+        """Returns whether Multus is ready.
+
+        Validates that the network attachment definitions are created, that the statefulset is
+        patched with the appropriate Multus annotations and capabilities and that the pod
+        also contains the same annotations and capabilities.
+
+        Returns:
+            bool: Whether Multus is ready
+        """
         return (
             self._network_attachment_definitions_are_created()
             and self._statefulset_is_patched()  # noqa: W503
