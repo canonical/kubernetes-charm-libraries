@@ -19,6 +19,7 @@ from lightkube.models.apps_v1 import StatefulSet, StatefulSetSpec
 from lightkube.models.core_v1 import (
     Capabilities,
     Container,
+    Pod,
     PodSpec,
     PodTemplateSpec,
     SecurityContext,
@@ -368,6 +369,106 @@ class TestKubernetes(unittest.TestCase):
             res=NetworkAttachmentDefinition, name=nad_name, namespace=self.namespace
         )
 
+    @patch("lightkube.core.client.Client.get")
+    def test_given_annotation_not_set_when_pod_is_ready_then_returns_false(self, patch_get):
+        patch_get.return_value = Pod(metadata=ObjectMeta(annotations={}))
+
+        is_ready = self.kubernetes_multus.pod_is_ready(
+            pod_name="pod name",
+            network_annotations=[
+                NetworkAnnotation(interface="whatever interface 1", name="whatever name 1")
+            ],
+            containers_requiring_net_admin_capability=[],
+        )
+
+        self.assertEqual(False, is_ready)
+
+    @patch("lightkube.core.client.Client.get")
+    def test_given_annotation_badly_set_when_pod_is_ready_then_returns_false(self, patch_get):
+        existing_network_annotation = NetworkAnnotation(
+            interface="whatever requested interface", name="whatever existing name"
+        )
+        requested_network_annotation = NetworkAnnotation(
+            interface="whatever requested", name="whatever requested name"
+        )
+        patch_get.return_value = Pod(
+            metadata=ObjectMeta(
+                annotations={
+                    "k8s.v1.cni.cncf.io/networks": json.dumps([existing_network_annotation.dict()])
+                }
+            )
+        )
+
+        is_ready = self.kubernetes_multus.pod_is_ready(
+            pod_name="pod name",
+            network_annotations=[requested_network_annotation],
+            containers_requiring_net_admin_capability=[],
+        )
+
+        self.assertEqual(False, is_ready)
+
+    @patch("lightkube.core.client.Client.get")
+    def test_given_net_admin_not_set_when_pod_is_ready_then_returns_false(self, patch_get):
+        network_annotation = NetworkAnnotation(
+            interface="whatever requested interface", name="whatever existing name"
+        )
+        container_name = "whatever name"
+        patch_get.return_value = Pod(
+            metadata=ObjectMeta(
+                annotations={
+                    "k8s.v1.cni.cncf.io/networks": json.dumps([network_annotation.dict()])
+                }
+            ),
+            spec=PodSpec(
+                containers=[
+                    Container(
+                        name=container_name,
+                        securityContext=SecurityContext(capabilities=Capabilities(add=[])),
+                    ),
+                ]
+            ),
+        )
+
+        is_ready = self.kubernetes_multus.pod_is_ready(
+            pod_name="pod name",
+            network_annotations=[network_annotation],
+            containers_requiring_net_admin_capability=[container_name],
+        )
+
+        self.assertEqual(False, is_ready)
+
+    @patch("lightkube.core.client.Client.get")
+    def test_given_pod_is_ready_when_pod_is_ready_then_returns_true(self, patch_get):
+        network_annotation = NetworkAnnotation(
+            interface="whatever requested interface", name="whatever existing name"
+        )
+        container_name = "whatever name"
+        patch_get.return_value = Pod(
+            metadata=ObjectMeta(
+                annotations={
+                    "k8s.v1.cni.cncf.io/networks": json.dumps([network_annotation.dict()])
+                }
+            ),
+            spec=PodSpec(
+                containers=[
+                    Container(
+                        name=container_name,
+                        securityContext=SecurityContext(
+                            capabilities=Capabilities(add=["NET_ADMIN"])
+                        ),
+                    ),
+                ]
+            ),
+        )
+
+        is_ready = self.kubernetes_multus.pod_is_ready(
+            pod_name="pod name",
+            network_annotations=[network_annotation],
+            containers_requiring_net_admin_capability=[container_name],
+        )
+
+        self.assertEqual(True, is_ready)
+
 
 class _TestCharmNoNAD(CharmBase):
     def __init__(self, *args):
@@ -577,3 +678,43 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
         harness.charm.on.remove.emit()
 
         patch_delete_network_attachment_definition.assert_not_called()
+
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.pod_is_ready")
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched")
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.network_attachment_definition_is_created")
+    def test_given_pod_not_ready_when_is_ready_then_return_false(
+        self,
+        patch_nad_is_created,
+        patch_statefulest_is_patched,
+        patch_pod_is_ready,
+    ):
+        patch_nad_is_created.return_value = True
+        patch_statefulest_is_patched.return_value = True
+        patch_pod_is_ready.return_value = False
+
+        harness = Harness(_TestCharmMultipleNAD)
+        self.addCleanup(harness.cleanup)
+        harness.begin()
+
+        is_ready = harness.charm.kubernetes_multus.is_ready()
+        self.assertEqual(False, is_ready)
+
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.pod_is_ready")
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched")
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.network_attachment_definition_is_created")
+    def test_given_pod_is_ready_when_is_ready_then_return_false(
+        self,
+        patch_nad_is_created,
+        patch_statefulest_is_patched,
+        patch_pod_is_ready,
+    ):
+        patch_nad_is_created.return_value = True
+        patch_statefulest_is_patched.return_value = True
+        patch_pod_is_ready.return_value = True
+
+        harness = Harness(_TestCharmMultipleNAD)
+        self.addCleanup(harness.cleanup)
+        harness.begin()
+
+        is_ready = harness.charm.kubernetes_multus.is_ready()
+        self.assertEqual(True, is_ready)
