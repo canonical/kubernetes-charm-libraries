@@ -467,7 +467,7 @@ class TestKubernetes(unittest.TestCase):
             containers_requiring_net_admin_capability=[container_name],
         )
 
-        self.assertEqual(True, is_ready)
+        self.assertTrue(is_ready)
 
 
 class _TestCharmNoNAD(CharmBase):
