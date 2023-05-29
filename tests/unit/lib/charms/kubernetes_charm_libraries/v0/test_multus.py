@@ -679,6 +679,7 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
 
         patch_delete_network_attachment_definition.assert_not_called()
 
+    @patch("lightkube.core.client.GenericSyncClient", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.pod_is_ready")
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched")
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.network_attachment_definition_is_created")
@@ -699,6 +700,7 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
         is_ready = harness.charm.kubernetes_multus.is_ready()
         self.assertEqual(False, is_ready)
 
+    @patch("lightkube.core.client.GenericSyncClient", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.pod_is_ready")
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched")
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.network_attachment_definition_is_created")
