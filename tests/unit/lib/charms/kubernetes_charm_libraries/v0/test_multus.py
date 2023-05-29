@@ -435,7 +435,7 @@ class TestKubernetes(unittest.TestCase):
             containers_requiring_net_admin_capability=[container_name],
         )
 
-        self.assertEqual(False, is_ready)
+        self.assertFalse(is_ready)
 
     @patch("lightkube.core.client.Client.get")
     def test_given_pod_is_ready_when_pod_is_ready_then_returns_true(self, patch_get):
