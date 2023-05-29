@@ -719,4 +719,4 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
         harness.begin()
 
         is_ready = harness.charm.kubernetes_multus.is_ready()
-        self.assertEqual(True, is_ready)
+        self.assertTrue(is_ready)
