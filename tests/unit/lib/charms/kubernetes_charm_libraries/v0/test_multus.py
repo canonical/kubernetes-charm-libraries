@@ -698,7 +698,7 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
         harness.begin()
 
         is_ready = harness.charm.kubernetes_multus.is_ready()
-        self.assertEqual(False, is_ready)
+        self.assertFalse(is_ready)
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.pod_is_ready")
