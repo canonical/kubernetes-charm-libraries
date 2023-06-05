@@ -507,12 +507,6 @@ class KubernetesMultusCharmLib(Object):
         nad_are_created = self._network_attachment_definitions_are_created()
         satefulset_is_patched = self._statefulset_is_patched()
         pod_is_ready = self._pod_is_ready()
-        if not nad_are_created:
-            logger.warning("Is Ready - Network attachment definitions are not created")
-        if not satefulset_is_patched:
-            logger.warning("Is Ready - Statefulset is not patched")
-        if not pod_is_ready:
-            logger.warning("Is Ready - Pod is not ready")
         return nad_are_created and satefulset_is_patched and pod_is_ready
 
     @property
