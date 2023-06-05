@@ -35,7 +35,7 @@ class YourCharm(CharmBase):
             ],
         )
 
-        def _get_network_attachment_definitions_from_config(self) -> list[NetworkAttachmentDefinition]:  # noqa: E501, W505
+    def _get_network_attachment_definitions_from_config(self) -> list[NetworkAttachmentDefinition]:  # noqa: E501, W505
         return [
             NetworkAttachmentDefinition(
                 metadata=ObjectMeta(name=NETWORK_ATTACHMENT_DEFINITION_NAME),
