@@ -50,7 +50,7 @@ class TestKubernetes(unittest.TestCase):
             network_attachment_definition=existing_nad
         )
 
-        assert is_created
+        self.assertTrue(is_created)
 
     @patch("lightkube.core.client.Client.get")
     def test_given_k8s_get_throws_notfound_api_error_when_nad_is_created_then_return_false(
@@ -67,7 +67,7 @@ class TestKubernetes(unittest.TestCase):
             )
         )
 
-        assert not is_created
+        self.assertFalse(is_created)
 
     @patch("lightkube.core.client.Client.get")
     def test_given_k8s_get_throws_other_api_error_when_nad_is_created_then_custom_exception_is_thrown(  # noqa: E501
@@ -256,7 +256,7 @@ class TestKubernetes(unittest.TestCase):
             cap_net_admin=False,
         )
 
-        assert not is_patched
+        self.assertFalse(is_patched)
 
     @patch("lightkube.core.client.Client.get")
     def test_given_annotations_are_different_when_statefulset_is_patched_then_returns_false(
@@ -298,12 +298,13 @@ class TestKubernetes(unittest.TestCase):
             cap_net_admin=False,
         )
 
-        assert not is_patched
+        self.assertFalse(is_patched)
 
     @patch("lightkube.core.client.Client.get")
     def test_given_annotations_are_already_present_when_statefulset_is_patched_then_returns_true(
         self, patch_get
     ):
+        container_name = "whatever"
         statefulset_name = "whatever name"
         network_annotations = [
             NetworkAnnotation(interface="whatever interface 1", name="whatever name 1"),
@@ -315,7 +316,11 @@ class TestKubernetes(unittest.TestCase):
                 serviceName="",
                 template=PodTemplateSpec(
                     spec=PodSpec(
-                        containers=[],
+                        containers=[
+                            Container(
+                                name=container_name,
+                            )
+                        ],
                     ),
                     metadata=ObjectMeta(
                         annotations={
@@ -334,12 +339,12 @@ class TestKubernetes(unittest.TestCase):
         is_patched = self.kubernetes_multus.statefulset_is_patched(
             name=statefulset_name,
             network_annotations=network_annotations,
-            container_name="container name",
+            container_name=container_name,
             privileged=False,
             cap_net_admin=False,
         )
 
-        assert is_patched
+        self.assertTrue(is_patched)
 
     @patch("lightkube.core.client.Client.get")
     def test_given_annotations_are_already_present_and_security_context_is_missing_when_statefulset_is_patched_then_returns_false(  # noqa: E501
@@ -383,12 +388,12 @@ class TestKubernetes(unittest.TestCase):
         is_patched = self.kubernetes_multus.statefulset_is_patched(
             name=statefulset_name,
             network_annotations=network_annotations,
-            container_name="container name",
+            container_name=container_name,
             privileged=False,
             cap_net_admin=True,
         )
 
-        assert not is_patched
+        self.assertFalse(is_patched)
 
     @patch("lightkube.core.client.Client.delete")
     def test_given_when_delete_nad_then_k8s_delete_is_called(self, patch_delete):
@@ -467,7 +472,7 @@ class TestKubernetes(unittest.TestCase):
         is_ready = self.kubernetes_multus.pod_is_ready(
             pod_name="pod name",
             network_annotations=[network_annotation],
-            container_name="container-name",
+            container_name=container_name,
             cap_net_admin=True,
             privileged=False,
         )

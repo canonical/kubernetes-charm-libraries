@@ -26,16 +26,19 @@ class YourCharm(CharmBase):
         super().__init__(*args)
         self._kubernetes_multus = KubernetesMultusCharmLib(
             charm=self,
-            network_attachment_definitions_func=self._get_network_attachment_definitions_from_config,
+            container_name=self._container_name,
+            cap_net_admin=True,
+            privileged=True,
             network_annotations=[
                 NetworkAnnotation(
-                    name=NETWORK_ATTACHMENT_DEFINITION_NAME,
-                    interface=INTERFACE_NAME,
+                    name=CORE_GW_NAD_NAME,
+                    interface=CORE_INTERFACE_NAME,
                 )
             ],
+            network_attachment_definitions_func=self._network_attachment_definitions_from_config,
         )
 
-    def _get_network_attachment_definitions_from_config(self) -> list[NetworkAttachmentDefinition]:
+    def _network_attachment_definitions_from_config(self) -> list[NetworkAttachmentDefinition]:
         return [
             NetworkAttachmentDefinition(
                 metadata=ObjectMeta(name=NETWORK_ATTACHMENT_DEFINITION_NAME),
@@ -99,7 +102,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 3
+LIBPATCH = 4
 
 
 logger = logging.getLogger(__name__)
