@@ -31,8 +31,8 @@ class YourCharm(CharmBase):
             privileged=True,
             network_annotations=[
                 NetworkAnnotation(
-                    name=CORE_GW_NAD_NAME,
-                    interface=CORE_INTERFACE_NAME,
+                    name=NETWORK_ATTACHMENT_DEFINITION_NAME,
+                    interface=INTERFACE_NAME,
                 )
             ],
             network_attachment_definitions_func=self._network_attachment_definitions_from_config,
