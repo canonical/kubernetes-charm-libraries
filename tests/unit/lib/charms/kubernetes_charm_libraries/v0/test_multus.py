@@ -40,13 +40,14 @@ class TestKubernetes(unittest.TestCase):
         self.kubernetes_multus = KubernetesClient(namespace=self.namespace)
 
     @patch("lightkube.core.client.Client.get")
-    def test_given_k8s_get_doesnt_throw_error_when_nad_is_created_then_return_true(
+    def test_given_k8s_existing_nad_identical_to_new_one_when_nad_is_created_then_return_true(
         self, patch_get
     ):
-        patch_get.return_value = Mock()
+        existing_nad = NetworkAttachmentDefinition(metadata=ObjectMeta(name="whatever name"))
+        patch_get.return_value = existing_nad
 
         is_created = self.kubernetes_multus.network_attachment_definition_is_created(
-            name="whatever name"
+            network_attachment_definition=existing_nad
         )
 
         assert is_created
@@ -61,7 +62,9 @@ class TestKubernetes(unittest.TestCase):
         )
 
         is_created = self.kubernetes_multus.network_attachment_definition_is_created(
-            name="whatever name"
+            network_attachment_definition=NetworkAttachmentDefinition(
+                metadata=ObjectMeta(name="whatever name")
+            )
         )
 
         assert not is_created
@@ -77,10 +80,14 @@ class TestKubernetes(unittest.TestCase):
         )
 
         with pytest.raises(KubernetesMultusError) as e:
-            self.kubernetes_multus.network_attachment_definition_is_created(name=nad_name)
+            self.kubernetes_multus.network_attachment_definition_is_created(
+                network_attachment_definition=NetworkAttachmentDefinition(
+                    metadata=ObjectMeta(name="whatever name")
+                )
+            )
         self.assertEqual(
             e.value.message,
-            f"Unexpected outcome when retrieving network attachment definition {nad_name}",
+            f"Unexpected outcome when retrieving NetworkAttachmentDefinition {nad_name}",
         )
 
     @patch("lightkube.core.client.Client.get")
@@ -96,7 +103,11 @@ class TestKubernetes(unittest.TestCase):
         )
 
         with pytest.raises(KubernetesMultusError) as e:
-            self.kubernetes_multus.network_attachment_definition_is_created(name="whatever name")
+            self.kubernetes_multus.network_attachment_definition_is_created(
+                network_attachment_definition=NetworkAttachmentDefinition(
+                    metadata=ObjectMeta(name="whatever name")
+                )
+            )
         self.assertEqual(
             e.value.message,
             "NetworkAttachmentDefinition resource not found. "
@@ -117,10 +128,14 @@ class TestKubernetes(unittest.TestCase):
         )
 
         with pytest.raises(KubernetesMultusError) as e:
-            self.kubernetes_multus.network_attachment_definition_is_created(name=nad_name)
+            self.kubernetes_multus.network_attachment_definition_is_created(
+                network_attachment_definition=NetworkAttachmentDefinition(
+                    metadata=ObjectMeta(name="whatever name")
+                )
+            )
         self.assertEqual(
             e.value.message,
-            f"Unexpected outcome when retrieving network attachment definition {nad_name}",
+            f"Unexpected outcome when retrieving NetworkAttachmentDefinition {nad_name}",
         )
 
     @patch("lightkube.core.client.Client.create")
@@ -137,7 +152,11 @@ class TestKubernetes(unittest.TestCase):
         )
 
         patch_create.assert_called_with(
-            obj={"metadata": ObjectMeta(name=nad_name), "spec": nad_spec}, namespace=self.namespace
+            obj=NetworkAttachmentDefinition(
+                metadata=ObjectMeta(name=nad_name),
+                spec=nad_spec,
+            ),
+            namespace=self.namespace,
         )
 
     @patch("lightkube.core.client.Client.patch")
@@ -469,18 +488,44 @@ class TestKubernetes(unittest.TestCase):
 
         self.assertTrue(is_ready)
 
+    @patch("lightkube.core.client.Client.list")
+    def test_given_k8s_returns_list_when_list_network_attachment_definitions_then_same_list_is_returned(  # noqa: E501
+        self, patch_list
+    ):
+        nad_list_return = ["whatever", "list", "content"]
+        patch_list.return_value = nad_list_return
+        nad_list = self.kubernetes_multus.list_network_attachment_definitions()
+
+        self.assertEqual(
+            nad_list,
+            nad_list_return,
+        )
+
+    @patch("lightkube.core.client.Client.list")
+    def test_given_k8s_apierror_when_list_network_attachment_definitions_then_multus_error_is_raised(  # noqa: E501
+        self, patch_list
+    ):
+        patch_list.side_effect = ApiError(
+            request=httpx.Request(method="GET", url="http://whatever.com"),
+            response=httpx.Response(status_code=400, json={"reason": "NotFound"}),
+        )
+
+        with pytest.raises(KubernetesMultusError):
+            self.kubernetes_multus.list_network_attachment_definitions()
+
 
 class _TestCharmNoNAD(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
+        self.network_annotations = []
         self.kubernetes_multus = KubernetesMultusCharmLib(
             charm=self,
-            network_attachment_definitions=[],
-            network_annotations_func=self._network_annotations_func,
+            network_attachment_definitions_func=self._network_annotations_func,
+            network_annotations=self.network_annotations,
             containers_requiring_net_admin_capability=[],
         )
 
-    def _network_annotations_func(self) -> list[NetworkAnnotation]:
+    def _network_annotations_func(self) -> list[NetworkAttachmentDefinition]:
         return []
 
 
@@ -507,34 +552,39 @@ class _TestCharmMultipleNAD(CharmBase):
         }
         self.annotation_1_name = "eth0"
         self.annotation_2_name = "eth1"
-        nad_1 = NetworkAttachmentDefinition(
-            metadata=ObjectMeta(name=self.nad_1_name),
-            spec=self.nad_1_spec,
-        )
-        nad_2 = NetworkAttachmentDefinition(
-            metadata=ObjectMeta(name=self.nad_2_name),
-            spec=self.nad_2_spec,
-        )
-        self.network_attachment_definitions = [nad_1, nad_2]
-        self.kubernetes_multus = KubernetesMultusCharmLib(
-            charm=self,
-            network_attachment_definitions=self.network_attachment_definitions,
-            network_annotations_func=self._network_annotations_func,
-        )
-
-    def _network_annotations_func(self) -> list[NetworkAnnotation]:
-        return [
+        self.network_annotations = [
             NetworkAnnotation(interface=self.nad_1_name, name=self.annotation_1_name),
             NetworkAnnotation(interface=self.nad_2_name, name=self.annotation_2_name),
+        ]
+        self.kubernetes_multus = KubernetesMultusCharmLib(
+            charm=self,
+            network_attachment_definitions_func=self.network_attachment_definitions_func,
+            network_annotations=self.network_annotations,
+        )
+
+    def network_attachment_definitions_func(self) -> list[NetworkAttachmentDefinition]:
+        return [
+            NetworkAttachmentDefinition(
+                metadata=ObjectMeta(name=self.nad_1_name),
+                spec=self.nad_1_spec,
+            ),
+            NetworkAttachmentDefinition(
+                metadata=ObjectMeta(name=self.nad_2_name),
+                spec=self.nad_2_spec,
+            ),
         ]
 
 
 class TestKubernetesMultusCharmLib(unittest.TestCase):
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition")
-    def test_given_no_nad_when_config_changed_then_create_is_not_called(self, patch_create_nad):
+    def test_given_no_nad_to_create_and_no_existing_nad_when_config_changed_then_create_is_not_called(  # noqa: E501
+        self, patch_create_nad, patch_existing_nads
+    ):
+        patch_existing_nads.return_value = []
         harness = Harness(_TestCharmNoNAD)
         self.addCleanup(harness.cleanup)
         harness.begin()
@@ -544,69 +594,216 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
         patch_create_nad.assert_not_called()
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition")
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.network_attachment_definition_is_created")
-    def test_given_multiple_nads_already_exist_when_config_changed_then_create_is_not_called(
-        self, patch_is_nad_created, patch_create_nad
+    def test_given_nads_already_exist_when_config_changed_then_create_is_not_called(
+        self,
+        patch_create_nad,
+        patch_list_nads,
     ):
         harness = Harness(_TestCharmMultipleNAD)
         self.addCleanup(harness.cleanup)
         harness.begin()
-        patch_is_nad_created.return_value = True
+        patch_list_nads.return_value = [
+            NetworkAttachmentDefinition(
+                metadata=ObjectMeta(
+                    name=harness.charm.nad_1_name,
+                    labels={"app.juju.is/created-by": harness.charm.app.name},
+                ),
+                spec=harness.charm.nad_1_spec,
+            ),
+            NetworkAttachmentDefinition(
+                metadata=ObjectMeta(
+                    name=harness.charm.nad_2_name,
+                    labels={"app.juju.is/created-by": harness.charm.app.name},
+                ),
+                spec=harness.charm.nad_2_spec,
+            ),
+        ]
 
         harness.charm.on.config_changed.emit()
 
         patch_create_nad.assert_not_called()
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition")
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.network_attachment_definition_is_created")
-    def test_given_nads_not_created_when_config_changed_then_create_is_called(
-        self,
-        patch_is_nad_created,
-        patch_create_nad,
+    def test_given_nads_not_created_when_config_changed_then_nad_create_is_called(
+        self, patch_create_nad, patch_list_nads
     ):
+        patch_list_nads.return_value = []
         harness = Harness(_TestCharmMultipleNAD)
         self.addCleanup(harness.cleanup)
         harness.begin()
-        patch_is_nad_created.return_value = False
 
         harness.charm.on.config_changed.emit()
 
         patch_create_nad.assert_has_calls(
             calls=[
                 call(
-                    network_attachment_definition={
-                        "metadata": ObjectMeta(name=harness.charm.nad_1_name),
-                        "spec": harness.charm.nad_1_spec,
-                    }
+                    network_attachment_definition=NetworkAttachmentDefinition(
+                        metadata=ObjectMeta(name=harness.charm.nad_1_name),
+                        spec=harness.charm.nad_1_spec,
+                    )
                 ),
                 call(
-                    network_attachment_definition={
-                        "metadata": ObjectMeta(name=harness.charm.nad_2_name),
-                        "spec": harness.charm.nad_2_spec,
-                    }
+                    network_attachment_definition=NetworkAttachmentDefinition(
+                        metadata=ObjectMeta(name=harness.charm.nad_2_name),
+                        spec=harness.charm.nad_2_spec,
+                    )
                 ),
             ]
         )
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition")
+    def test_given_nads_exist_but_created_by_different_charm_when_config_changed_then_nad_create_is_called(  # noqa: E501
+        self, patch_create_nad, patch_list_nads
+    ):
+        harness = Harness(_TestCharmMultipleNAD)
+        self.addCleanup(harness.cleanup)
+        harness.begin()
+        patch_list_nads.return_value = [
+            NetworkAttachmentDefinition(
+                metadata=ObjectMeta(
+                    name=harness.charm.nad_1_name,
+                    labels={"app.juju.is/created-by": "different-app"},
+                ),
+                spec=harness.charm.nad_1_spec,
+            ),
+            NetworkAttachmentDefinition(
+                metadata=ObjectMeta(
+                    name=harness.charm.nad_2_name,
+                    labels={"app.juju.is/created-by": "different-app"},
+                ),
+                spec=harness.charm.nad_2_spec,
+            ),
+        ]
+
+        harness.charm.on.config_changed.emit()
+
+        patch_create_nad.assert_has_calls(
+            calls=[
+                call(
+                    network_attachment_definition=NetworkAttachmentDefinition(
+                        metadata=ObjectMeta(name=harness.charm.nad_1_name),
+                        spec=harness.charm.nad_1_spec,
+                    )
+                ),
+                call(
+                    network_attachment_definition=NetworkAttachmentDefinition(
+                        metadata=ObjectMeta(name=harness.charm.nad_2_name),
+                        spec=harness.charm.nad_2_spec,
+                    )
+                ),
+            ]
+        )
+
+    @patch("lightkube.core.client.GenericSyncClient", new=Mock)
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition", new=Mock
+    )
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_network_attachment_definition")
+    def test_given_nads_exist_but_are_differentwhen_config_changed_then_nad_delete_is_called(
+        self, patch_delete_nad, patch_list_nads
+    ):
+        harness = Harness(_TestCharmMultipleNAD)
+        self.addCleanup(harness.cleanup)
+        harness.begin()
+        patch_list_nads.return_value = [
+            NetworkAttachmentDefinition(
+                metadata=ObjectMeta(
+                    name=harness.charm.nad_1_name,
+                    labels={"app.juju.is/created-by": harness.charm.app.name},
+                ),
+                spec={"different": "spec"},
+            ),
+            NetworkAttachmentDefinition(
+                metadata=ObjectMeta(
+                    name=harness.charm.nad_2_name,
+                    labels={"app.juju.is/created-by": harness.charm.app.name},
+                ),
+                spec={"different": "spec"},
+            ),
+        ]
+
+        harness.charm.on.config_changed.emit()
+
+        patch_delete_nad.assert_has_calls(
+            calls=[
+                call(name=harness.charm.nad_1_name),
+                call(name=harness.charm.nad_2_name),
+            ]
+        )
+
+    @patch("lightkube.core.client.GenericSyncClient", new=Mock)
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition")
+    def test_given_nads_exist_but_are_differentwhen_config_changed_then_nad_create_is_called(
+        self, patch_create_nad, patch_list_nads
+    ):
+        harness = Harness(_TestCharmMultipleNAD)
+        self.addCleanup(harness.cleanup)
+        harness.begin()
+        patch_list_nads.return_value = [
+            NetworkAttachmentDefinition(
+                metadata=ObjectMeta(
+                    name=harness.charm.nad_1_name,
+                    labels={"app.juju.is/created-by": harness.charm.app.name},
+                ),
+                spec={"different": "spec"},
+            ),
+            NetworkAttachmentDefinition(
+                metadata=ObjectMeta(
+                    name=harness.charm.nad_2_name,
+                    labels={"app.juju.is/created-by": harness.charm.app.name},
+                ),
+                spec={"different": "spec"},
+            ),
+        ]
+
+        harness.charm.on.config_changed.emit()
+
+        patch_create_nad.assert_has_calls(
+            calls=[
+                call(
+                    network_attachment_definition=NetworkAttachmentDefinition(
+                        metadata=ObjectMeta(name=harness.charm.nad_1_name),
+                        spec=harness.charm.nad_1_spec,
+                    )
+                ),
+                call(
+                    network_attachment_definition=NetworkAttachmentDefinition(
+                        metadata=ObjectMeta(name=harness.charm.nad_2_name),
+                        spec=harness.charm.nad_2_spec,
+                    )
+                ),
+            ]
+        )
+
+    @patch("lightkube.core.client.GenericSyncClient", new=Mock)
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset")
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched")
     @patch(
         f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition", new=Mock
     )
-    @patch(
-        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.network_attachment_definition_is_created",
-        new=Mock,
-    )
-    def test_given_nads_not_created_when_config_changed_then_patch_statefulset_create_is_called(
-        self, patch_is_statefulset_patched, patch_patch_statefulset
+    def test_given_nads_not_created_when_config_changed_then_patch_statefulset_is_called(
+        self, patch_is_statefulset_patched, patch_patch_statefulset, patch_list_nads
     ):
+        patch_list_nads.return_value = []
         harness = Harness(_TestCharmMultipleNAD)
         self.addCleanup(harness.cleanup)
         harness.begin()
