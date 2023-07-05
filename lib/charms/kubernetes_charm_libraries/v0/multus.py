@@ -179,7 +179,9 @@ class KubernetesClient:
         try:
             pod = self.client.get(Pod, name=pod_name, namespace=self.namespace)
         except ApiError as e:
-            if e.status.reason != "Unauthorized":
+            if e.status.reason == "Unauthorized":
+                logger.debug("kube-apiserver not ready yet")
+            else:
                 raise KubernetesMultusError(f"Pod {pod_name} not found")
             return False
         return self._pod_is_patched(
@@ -209,7 +211,11 @@ class KubernetesClient:
             )
             return existing_nad == network_attachment_definition
         except ApiError as e:
-            if e.status.reason not in ["NotFound", "Unauthorized"]:
+            if e.status.reason == "NotFound":
+                logger.debug("NetworkAttachmentDefinition not found")
+            elif e.status.reason == "Unauthorized":
+                logger.debug("kube-apiserver not ready yet")
+            else:
                 raise KubernetesMultusError(
                     f"Unexpected outcome when retrieving NetworkAttachmentDefinition "
                     f"{network_attachment_definition.metadata.name}"
@@ -363,7 +369,9 @@ class KubernetesClient:
         try:
             statefulset = self.client.get(res=StatefulSet, name=name, namespace=self.namespace)
         except ApiError as e:
-            if e.status.reason != "Unauthorized":
+            if e.status.reason == "Unauthorized":
+                logger.debug("kube-apiserver not ready yet")
+            else:
                 raise KubernetesMultusError(f"Could not get statefulset {name}")
             return False
         return self._pod_is_patched(
