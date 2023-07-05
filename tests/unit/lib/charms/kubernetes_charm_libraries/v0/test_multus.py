@@ -70,6 +70,23 @@ class TestKubernetes(unittest.TestCase):
         self.assertFalse(is_created)
 
     @patch("lightkube.core.client.Client.get")
+    def test_given_k8s_get_throws_unauthorized_api_error_when_nad_is_created_then_return_false(
+        self, patch_get
+    ):
+        patch_get.side_effect = ApiError(
+            request=httpx.Request(method="GET", url="http://whatever.com"),
+            response=httpx.Response(status_code=401, json={"reason": "Unauthorized"}),
+        )
+
+        is_created = self.kubernetes_multus.network_attachment_definition_is_created(
+            network_attachment_definition=NetworkAttachmentDefinition(
+                metadata=ObjectMeta(name="whatever name")
+            )
+        )
+
+        self.assertFalse(is_created)
+
+    @patch("lightkube.core.client.Client.get")
     def test_given_k8s_get_throws_other_api_error_when_nad_is_created_then_custom_exception_is_thrown(  # noqa: E501
         self, patch_get
     ):
@@ -228,6 +245,30 @@ class TestKubernetes(unittest.TestCase):
         )
         self.assertEqual(kwargs["patch_type"], PatchType.APPLY)
         self.assertEqual(kwargs["namespace"], self.namespace)
+
+    @patch("lightkube.core.client.Client.get")
+    def test_given_k8s_get_throws_unauthorized_api_error_when_statefulset_is_patched_then_returns_false(  # noqa: E501
+        self, patch_get
+    ):
+        statefulset_name = "whatever name"
+        network_annotations = [
+            NetworkAnnotation(interface="whatever interface 1", name="whatever name 1"),
+            NetworkAnnotation(interface="whatever interface 2", name="whatever name 2"),
+        ]
+        patch_get.side_effect = ApiError(
+            request=httpx.Request(method="GET", url="http://whatever.com"),
+            response=httpx.Response(status_code=401, json={"reason": "Unauthorized"}),
+        )
+
+        is_patched = self.kubernetes_multus.statefulset_is_patched(
+            name=statefulset_name,
+            network_annotations=network_annotations,
+            container_name="container name",
+            privileged=False,
+            cap_net_admin=False,
+        )
+
+        self.assertFalse(is_patched)
 
     @patch("lightkube.core.client.Client.get")
     def test_given_no_annotations_when_statefulset_is_patched_then_returns_false(self, patch_get):
@@ -404,6 +445,27 @@ class TestKubernetes(unittest.TestCase):
         patch_delete.assert_called_with(
             res=NetworkAttachmentDefinition, name=nad_name, namespace=self.namespace
         )
+
+    @patch("lightkube.core.client.Client.get")
+    def test_given_k8s_get_throws_unauthorized_api_error_when_pod_is_ready_then_returns_false(
+        self, patch_get
+    ):
+        patch_get.side_effect = ApiError(
+            request=httpx.Request(method="GET", url="http://whatever.com"),
+            response=httpx.Response(status_code=401, json={"reason": "Unauthorized"}),
+        )
+
+        is_ready = self.kubernetes_multus.pod_is_ready(
+            pod_name="pod name",
+            network_annotations=[
+                NetworkAnnotation(interface="whatever interface 1", name="whatever name 1")
+            ],
+            container_name="container-name",
+            cap_net_admin=False,
+            privileged=False,
+        )
+
+        self.assertFalse(is_ready)
 
     @patch("lightkube.core.client.Client.get")
     def test_given_annotation_not_set_when_pod_is_ready_then_returns_false(self, patch_get):
