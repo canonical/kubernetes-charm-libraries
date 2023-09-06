@@ -102,7 +102,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 5
+LIBPATCH = 6
 
 
 logger = logging.getLogger(__name__)
@@ -147,6 +147,15 @@ class KubernetesClient:
     def __init__(self, namespace: str):
         self.client = Client()
         self.namespace = namespace
+
+    def delete_pod(self, pod_name: str) -> None:
+        """Deleting given pod.
+
+        Args:
+            pod_name    (str): Pod name to delete
+
+        """
+        self.client.delete(Pod, pod_name, namespace=self.namespace)
 
     def pod_is_ready(
         self,
@@ -547,7 +556,6 @@ class KubernetesMultusCharmLib(Object):
                     network_attachment_definitions_to_create.remove(
                         existing_network_attachment_definition
                     )
-
         for network_attachment_definition_to_create in network_attachment_definitions_to_create:
             self.kubernetes.create_network_attachment_definition(
                 network_attachment_definition=network_attachment_definition_to_create
@@ -619,3 +627,15 @@ class KubernetesMultusCharmLib(Object):
                 self.kubernetes.delete_network_attachment_definition(
                     name=network_attachment_definition.metadata.name  # type: ignore[union-attr]
                 )
+
+    def delete_pod(self) -> None:
+        """Delete the pod."""
+        self.kubernetes.delete_pod(self._pod)
+
+    def get_nad_definitions(self) -> list[NetworkAttachmentDefinition]:
+        """Get all existing network attachment definitions in the namespace.
+
+        Returns:
+            NetworkAttachmentDefinitions    (list) :    List of network attachment definitions
+        """
+        return self.kubernetes.list_network_attachment_definitions()
