@@ -152,7 +152,7 @@ class KubernetesClient:
         """Deleting given pod.
 
         Args:
-            pod_name (str): Pod name to delete
+            pod_name (str): Pod name
 
         """
         self.client.delete(Pod, pod_name, namespace=self.namespace)
