@@ -1028,7 +1028,7 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
-    def test_given_k8s_returns_list_when_get_nad_definitions_then_same_list_is_returned(  # noqa: E501
+    def test_given_k8s_returns_list_when_get_network_attachment_definitions_then_same_list_is_returned(  # noqa: E501
         self, patch_list
     ):
         harness = Harness(_TestCharmNoNAD)
@@ -1036,17 +1036,17 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
         harness.begin()
         nad_list_return = ["whatever", "list", "content"]
         patch_list.return_value = nad_list_return
-        expected_nad_list = harness.charm.kubernetes_multus.get_nad_definitions()
+        expected_nad_list = harness.charm.kubernetes_multus.get_network_attachment_definitions()
         self.assertListEqual(nad_list_return, expected_nad_list)
         patch_list.assert_called_once()
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
-    def test_given_k8s_returns_list_when_get_nad_definitions_then_list_network_attachment_definitions_is_called(  # noqa: E501
+    def test_given_k8s_returns_list_when_get_network_attachment_definitions_then_list_network_attachment_definitions_is_called(  # noqa: E501
         self, patch_list
     ):
         harness = Harness(_TestCharmNoNAD)
         self.addCleanup(harness.cleanup)
         harness.begin()
-        harness.charm.kubernetes_multus.get_nad_definitions()
+        harness.charm.kubernetes_multus.get_network_attachment_definitions()
         patch_list.assert_called_once()

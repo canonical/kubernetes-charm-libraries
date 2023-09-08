@@ -632,7 +632,7 @@ class KubernetesMultusCharmLib(Object):
         """Delete the pod."""
         self.kubernetes.delete_pod(self._pod)
 
-    def get_nad_definitions(self) -> list[NetworkAttachmentDefinition]:
+    def get_network_attachment_definitions(self) -> list[NetworkAttachmentDefinition]:
         """Get all existing network attachment definitions in the namespace.
 
         Returns:
