@@ -601,7 +601,9 @@ class TestKubernetes(unittest.TestCase):
             self.kubernetes_multus.list_network_attachment_definitions()
 
     @patch("lightkube.core.client.Client.delete")
-    def test_given_pod_is_deleted_then_k8s_delete_is_called(self, patch_delete):
+    def test_given_pod_is_deleted_when_delete_pod_then_client_delete_is_called_by_pod_name_and_namespace(  # noqa: E501
+        self, patch_delete
+    ):
         pod_name = "whatever pod"
 
         self.kubernetes_multus.delete_pod(pod_name)
@@ -1019,7 +1021,9 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_pod")
-    def test_given_pod_is_deleted_then_k8s_delete_is_called(self, patch_delete):
+    def test_given_pod_is_deleted_when_multus_delete_pod_then_k8s_client_delete_pod_is_called(
+        self, patch_delete
+    ):  # noqa: E501
         harness = Harness(_TestCharmNoNAD)
         self.addCleanup(harness.cleanup)
         harness.begin()
