@@ -612,6 +612,7 @@ class TestKubernetes(unittest.TestCase):
         patch_delete.assert_called_with(Pod, pod_name, namespace=self.namespace)
 
 
+<<<<<<< HEAD
 class NadConfigChangedEvent(EventBase):
     """Event triggered when an existing network attachment definition is changed."""
 
@@ -623,6 +624,26 @@ class KubernetesMultusCharmEvents(CharmEvents):
     """Kubernetes Multus Charm Events."""
 
     nad_config_changed = EventSource(NadConfigChangedEvent)
+=======
+class _TestCharmInvalidNAD(CharmBase):
+    """If invalid config is provided by user, _network_annotations_func returns None.
+
+    This is the protection mechanism not to process invalid configs.
+    """
+
+    def __init__(self, *args):
+        super().__init__(*args)
+        self.network_annotations = []
+        self.kubernetes_multus = KubernetesMultusCharmLib(
+            charm=self,
+            network_attachment_definitions_func=self._network_annotations_func,
+            network_annotations=self.network_annotations,
+            container_name="container-name",
+        )
+
+    def _network_annotations_func(self) -> list[NetworkAttachmentDefinition]:
+        return None  # type: ignore
+>>>>>>> 9f64d64 (Add NAD config change event and trigger pod restart)
 
 
 class _TestCharmNoNAD(CharmBase):
@@ -717,7 +738,28 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition")
+<<<<<<< HEAD
     def test_given_nads_already_exist_when_nad_config_changed_then_create_is_not_called(
+=======
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_network_attachment_definition")
+    def test_given_invalid_nads_to_create_when_config_changed_then_does_nothing(  # noqa: E501
+        self, patch_delete_nad, patch_create_nad, patch_list_nads
+    ):
+        harness = Harness(_TestCharmInvalidNAD)
+        self.addCleanup(harness.cleanup)
+        harness.begin()
+        harness.charm.on.config_changed.emit()
+        patch_create_nad.assert_not_called()
+        patch_delete_nad.assert_not_called()
+        patch_list_nads.assert_not_called()
+
+    @patch("lightkube.core.client.GenericSyncClient", new=Mock)
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition")
+    def test_given_nads_already_exist_when_config_changed_then_create_is_not_called(
+>>>>>>> 9f64d64 (Add NAD config change event and trigger pod restart)
         self,
         patch_create_nad,
         patch_list_nads,
@@ -843,12 +885,14 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
         )
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_pod")
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
     @patch(
         f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition", new=Mock
     )
+<<<<<<< HEAD
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_network_attachment_definition")
     def test_given_nads_exist_but_are_different_when_nad_config_changed_then_nad_delete_is_called(
         self, patch_delete_nad, patch_list_nads
@@ -892,6 +936,13 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_network_attachment_definition")
     def test_given_nads_exist_but_are_different_when_config_changed_then_nad_delete_is_not_called(
         self, patch_delete_nad, patch_list_nads
+=======
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_network_attachment_definition", new=Mock
+    )
+    def test_given_nads_exist_but_they_are_different_when_config_changed_then_pod_delete_is_called_once(  # noqa: E501
+        self, patch_list_nads, patch_delete_pod
+>>>>>>> 9f64d64 (Add NAD config change event and trigger pod restart)
     ):
         harness = Harness(_TestCharmMultipleNAD)
         self.addCleanup(harness.cleanup)
@@ -912,17 +963,67 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
                 spec={"different": "spec"},
             ),
         ]
-
         harness.charm.on.config_changed.emit()
+        patch_delete_pod.assert_called_once()
 
+<<<<<<< HEAD
         patch_delete_nad.assert_not_called()
+=======
+    @patch("lightkube.core.client.GenericSyncClient", new=Mock)
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_pod")
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition", new=Mock
+    )
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_network_attachment_definition", new=Mock
+    )
+    def test_given_nads_exist_but_are_same_when_config_changed_then_pod_delete_is_not_called(
+        self, patch_list_nads, patch_delete_pod
+    ):
+        harness = Harness(_TestCharmMultipleNAD)
+        self.addCleanup(harness.cleanup)
+        harness.begin()
+        patch_list_nads.return_value = [
+            NetworkAttachmentDefinition(
+                metadata=ObjectMeta(name="nad-1"),
+                spec={
+                    "config": {
+                        "cniVersion": "1.2.3",
+                        "type": "macvlan",
+                        "ipam": {"type": "static"},
+                        "capabilities": {"mac": True},
+                    }
+                },
+            ),
+            NetworkAttachmentDefinition(
+                metadata=ObjectMeta(name="nad-2"),
+                spec={
+                    "config": {
+                        "cniVersion": "4.5.6",
+                        "type": "pizza",
+                        "ipam": {"type": "whatever"},
+                        "capabilities": {"mac": True},
+                    }
+                },
+            ),
+        ]
+        harness.charm.on.config_changed.emit()
+        patch_delete_pod.assert_not_called()
+>>>>>>> 9f64d64 (Add NAD config change event and trigger pod restart)
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition")
+<<<<<<< HEAD
     def test_given_nads_exist_but_are_different_when_nad_config_changed_then_nad_create_is_called(
+=======
+    def test_given_nads_exist_but_are_different_when_config_changed_then_nad_create_is_called(
+>>>>>>> 9f64d64 (Add NAD config change event and trigger pod restart)
         self, patch_create_nad, patch_list_nads
     ):
         harness = Harness(_TestCharmMultipleNAD)
