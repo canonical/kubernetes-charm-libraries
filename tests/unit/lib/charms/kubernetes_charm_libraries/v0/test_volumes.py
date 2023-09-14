@@ -7,7 +7,6 @@ from unittest.mock import Mock, patch
 import httpx
 from charms.kubernetes_charm_libraries.v0.volumes import (  # type: ignore[import]
     KubernetesClient,
-    KubernetesRequestedVolumesError,
     KubernetesVolumesPatchLib,
     RequestedVolume,
 )
@@ -252,7 +251,7 @@ class TestKubernetes(unittest.TestCase):
         self.assertFalse(pod_is_patched)
 
     @patch("lightkube.core.client.Client.get")
-    def test_given_requested_volumes_are_already_present_when_statefulset_is_patched_then_returns_true(
+    def test_given_requested_volumes_are_already_present_when_statefulset_is_patched_then_returns_true(  # noqa: E501
         self, patch_get
     ):
         container_name = "whatever container name"
