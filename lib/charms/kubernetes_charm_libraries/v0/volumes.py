@@ -8,23 +8,19 @@
 """
 import logging
 from dataclasses import dataclass
-
 from typing import Union
 
 from lightkube import Client
 from lightkube.core.exceptions import ApiError
-
 from lightkube.models.apps_v1 import StatefulSetSpec
 from lightkube.models.core_v1 import (
     Container,
+    EmptyDirVolumeSource,
     PodSpec,
     PodTemplateSpec,
     Volume,
     VolumeMount,
-    EmptyDirVolumeSource,
-    ResourceRequirements,
 )
-
 from lightkube.resources.apps_v1 import StatefulSet
 from lightkube.resources.core_v1 import Pod
 from lightkube.types import PatchType
@@ -90,7 +86,7 @@ class KubernetesClient:
             else:
                 raise KubernetesAdditionalVolumesError(f"Pod {pod_name} not found")
             return False
-        return self._pod_is_patched(
+        return self._pod_contains_additional_volumes(
             pod=pod,  # type: ignore[arg-type]
             additional_volumes=additional_volumes,
             container_name=container_name,
@@ -124,7 +120,7 @@ class KubernetesClient:
             statefulset_spec=statefulset.spec,
             additional_volumes=additional_volumes,
         )
-        pod_is_patched = self._pod_is_patched(
+        pod_is_patched = self._pod_contains_additional_volumes(
             container_name=container_name,
             additional_volumes=additional_volumes,
             pod=statefulset.spec.template,
@@ -142,7 +138,7 @@ class KubernetesClient:
                 return False
         return True
 
-    def _pod_is_patched(
+    def _pod_contains_additional_volumes(
         self,
         container_name: str,
         additional_volumes: list[AdditionalVolume],
@@ -188,7 +184,7 @@ class KubernetesClient:
                         return False
         return True
 
-    def patch_statefulset(
+    def patch_volumes(
         self,
         name: str,
         additional_volumes: list[AdditionalVolume],
@@ -211,7 +207,6 @@ class KubernetesClient:
         container = Container(
             name=container_name,
             volumeMounts=[],
-            resources=ResourceRequirements(limits={}, requests={}),
         )
         container.volumeMounts += [
             VolumeMount(name=additional_volume.name, mountPath=additional_volume.mount_point)
@@ -262,12 +257,20 @@ class KubernetesClient:
         except ApiError:
             raise KubernetesAdditionalVolumesError(f"Could not get statefulset {name}")
         containers: list[Container] = statefulset.spec.template.spec.containers
-        additional_volumes_names = [additional_volume.name for additional_volume in additional_volumes]
+        additional_volumes_names = [
+            additional_volume.name for additional_volume in additional_volumes
+        ]
         for container in containers:
             if container.name == container_name:
-                container.volumeMounts = [item for item in container.volumeMounts if item.name not in additional_volumes_names]
+                container.volumeMounts = [
+                    item
+                    for item in container.volumeMounts
+                    if item.name not in additional_volumes_names
+                ]
         statefulset_volumes = statefulset.spec.template.spec.volumes
-        statefulset.spec.template.spec.volumes = [item for item in statefulset_volumes if item.name not in additional_volumes_names]
+        statefulset.spec.template.spec.volumes = [
+            item for item in statefulset_volumes if item.name not in additional_volumes_names
+        ]
         try:
             self.client.replace(
                 name=name,
@@ -314,7 +317,7 @@ class KubernetesVolumesLib(Object):
     def add_additional_volumes(self) -> None:
         """Creates additional volumes and patches statefulset."""
         if not self.is_ready():
-            self.kubernetes.patch_statefulset(
+            self.kubernetes.patch_volumes(
                 name=self.model.app.name,
                 additional_volumes=self.additional_volumes,
                 container_name=self.container_name,
