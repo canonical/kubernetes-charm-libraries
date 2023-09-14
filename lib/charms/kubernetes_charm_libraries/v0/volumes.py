@@ -1,11 +1,7 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Charm Library used to leverage the AdditionalVolumes Kubernetes in charms.
-
-- On config-changed, it will:
-  - Patch the statefulset with the necessary volumes for the container to have additional volumes
-"""
+"""Charm Library used to leverage the Volumes Kubernetes in charms."""
 import logging
 from dataclasses import dataclass
 from typing import Union
@@ -15,7 +11,6 @@ from lightkube.core.exceptions import ApiError
 from lightkube.models.apps_v1 import StatefulSetSpec
 from lightkube.models.core_v1 import (
     Container,
-    EmptyDirVolumeSource,
     PodSpec,
     PodTemplateSpec,
     ResourceRequirements,
@@ -25,23 +20,20 @@ from lightkube.models.core_v1 import (
 from lightkube.resources.apps_v1 import StatefulSet
 from lightkube.resources.core_v1 import Pod
 from lightkube.types import PatchType
-from ops.charm import CharmBase
-from ops.framework import Object
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
-class AdditionalVolume:
-    """AdditionalVolume."""
+class RequestedVolume:
+    """RequestedVolume."""
 
-    name: str
-    mount_point: str
-    medium: str
+    volume: Volume
+    volume_mount: VolumeMount
 
 
-class KubernetesAdditionalVolumesError(Exception):
-    """KubernetesAdditionalVolumesError."""
+class KubernetesRequestedVolumesError(Exception):
+    """KubernetesRequestedVolumesError."""
 
     def __init__(self, message: str):
         self.message = message
@@ -59,14 +51,14 @@ class KubernetesClient:
         self,
         pod_name: str,
         *,
-        additional_volumes: list[AdditionalVolume],
+        requested_volumes: list[RequestedVolume],
         container_name: str,
     ) -> bool:
-        """Returns whether pod has the requisite additional volumes.
+        """Returns whether pod has the requisite requested volumes.
 
         Args:
             pod_name: Pod name
-            additional_volumes: List of additional volumes
+            requested_volumes: List of requested volumes
             container_name: Container name
 
         Returns:
@@ -85,138 +77,149 @@ class KubernetesClient:
             if e.status.reason == "Unauthorized":
                 logger.debug("kube-apiserver not ready yet")
             else:
-                raise KubernetesAdditionalVolumesError(f"Pod {pod_name} not found")
+                raise KubernetesRequestedVolumesError(f"Pod {pod_name} not found")
             return False
-        return self._pod_contains_additional_volumes(
+        return self._pod_contains_requested_volumes(
             pod=pod,  # type: ignore[arg-type]
-            additional_volumes=additional_volumes,
+            requested_volumes=requested_volumes,
             container_name=container_name,
         )
 
     def statefulset_is_patched(
         self,
-        name: str,
-        additional_volumes: list[AdditionalVolume],
-        container_name: str,
+        statefulset_name: str,
+        requested_volumes: list[RequestedVolume],
     ) -> bool:
-        """Returns whether the statefulset has the expected additional volumes.
+        """Returns whether the statefulset has the expected requested volumes.
 
         Args:
-            name: Statefulset name.
-            additional_volumes: list of additional volumes
-            container_name: Container name
+            statefulset_name: Statefulset name.
+            requested_volumes: list of requested volumes
 
         Returns:
-            bool: Whether the statefulset has the expected additional volumes.
+            bool: Whether the statefulset has the expected requested volumes.
         """
         try:
-            statefulset = self.client.get(res=StatefulSet, name=name, namespace=self.namespace)
+            statefulset = self.client.get(
+                res=StatefulSet, name=statefulset_name, namespace=self.namespace
+            )
         except ApiError as e:
             if e.status.reason == "Unauthorized":
                 logger.debug("kube-apiserver not ready yet")
             else:
-                raise KubernetesAdditionalVolumesError(f"Could not get statefulset {name}")
+                raise KubernetesRequestedVolumesError(
+                    f"Could not get statefulset {statefulset_name}"
+                )
             return False
-        statefulset_volumes_are_patched = self._statefulset_volumes_are_patched(
+        return self._statefulset_volumes_are_patched(
             statefulset_spec=statefulset.spec,
-            additional_volumes=additional_volumes,
+            requested_volumes=requested_volumes,
         )
-        pod_is_patched = self._pod_contains_additional_volumes(
-            container_name=container_name,
-            additional_volumes=additional_volumes,
-            pod=statefulset.spec.template,
-        )
-        return statefulset_volumes_are_patched and pod_is_patched
 
     @staticmethod
     def _statefulset_volumes_are_patched(
         statefulset_spec: StatefulSetSpec,
-        additional_volumes: list[AdditionalVolume],
+        requested_volumes: list[RequestedVolume],
     ) -> bool:
-        volumes_names = [volume.name for volume in statefulset_spec.template.spec.volumes]
-        for additional_volume in additional_volumes:
-            if additional_volume.name not in volumes_names:
-                return False
-        return True
+        """Returns whether a StatefulSet is patched with requested volumes.
 
-    def _pod_contains_additional_volumes(
+        Args:
+            statefulset_spec: StatefulSet spec
+            requested_volumes: List of requested volumes
+
+        Returns:
+            bool
+        """
+        if not statefulset_spec.template.spec.volumes:
+            return False
+        return all(
+            [
+                requested_volume.volume in statefulset_spec.template.spec.volumes
+                for requested_volume in requested_volumes
+            ]
+        )
+
+    def _pod_contains_requested_volumes(
         self,
         container_name: str,
-        additional_volumes: list[AdditionalVolume],
+        requested_volumes: list[RequestedVolume],
         pod: Union[PodTemplateSpec, Pod],
     ) -> bool:
-        """Returns whether a pod is patched with additional volumes.
+        """Returns whether a pod is patched with requested volumes.
 
         Args:
             container_name: Container name
-            additional_volumes: List of additional volumes
+            requested_volumes: List of requested volumes
             pod: Kubernetes pod object.
 
         Returns:
             bool
         """
-        return self._pod_volumemounts_contain_additional_volumes(
+        return self._pod_volumemounts_contain_requested_volumes(
             containers=pod.spec.containers,
             container_name=container_name,
-            additional_volumes=additional_volumes,
+            requested_volumes=requested_volumes,
         )
 
     @staticmethod
-    def _pod_volumemounts_contain_additional_volumes(
+    def _pod_volumemounts_contain_requested_volumes(
         containers: list[Container],
         container_name: str,
-        additional_volumes: list[AdditionalVolume],
+        requested_volumes: list[RequestedVolume],
     ) -> bool:
-        """Returns whether container spec contains the expected additional volumes mounts.
+        """Returns whether container spec contains the expected requested volumes mounts.
 
         Args:
             containers: list of Containers
             container_name: Container name
-            additional_volumes: AdditionalVolumes we expect to be set
+            requested_volumes: Requested volumes we expect to be set
 
         Returns:
             bool
         """
-        for container in containers:
-            if container.name == container_name:
-                volume_mounts_names = [mount.name for mount in container.volumeMounts]
-                for additional_volume in additional_volumes:
-                    if additional_volume.name not in volume_mounts_names:
-                        return False
-        return True
+        container = next(container for container in containers if container.name == container_name)
+        return all(
+            [
+                requested_volume.volume_mount in container.volumeMounts
+                for requested_volume in requested_volumes
+            ]
+        )
 
     def patch_volumes(
         self,
-        name: str,
-        additional_volumes: list[AdditionalVolume],
+        statefulset_name: str,
+        requested_volumes: list[RequestedVolume],
         container_name: str,
     ) -> None:
-        """Patches a statefulset with additional volumes.
+        """Patches a statefulset with requested volumes.
 
         Args:
-            name: Statefulset name
-            additional_volumes: List of additional volumes
+            statefulset_name: Statefulset name
+            requested_volumes: List of requested volumes
             container_name: Container name
         """
-        if not additional_volumes:
-            logger.info("No additional volumes were provided")
+        if not requested_volumes:
+            logger.info("No requested volumes were provided")
             return
         try:
-            statefulset = self.client.get(res=StatefulSet, name=name, namespace=self.namespace)
+            statefulset = self.client.get(
+                res=StatefulSet, name=statefulset_name, namespace=self.namespace
+            )
         except ApiError:
-            raise KubernetesAdditionalVolumesError(f"Could not get statefulset {name}")
+            raise KubernetesRequestedVolumesError(f"Could not get statefulset {statefulset_name}")
         container = Container(
             name=container_name,
-            volumeMounts=[],
+            volumeMounts=[requested_volume.volume_mount for requested_volume in requested_volumes],
             resources=ResourceRequirements(limits={}, requests={}),
         )
-        for additional_volume in additional_volumes:
-            container.volumeMounts.append(
-                VolumeMount(name=additional_volume.name, mountPath=additional_volume.mount_point)
-            )
-            if additional_volume.name == "hugepages":
-                container.resources.limits.update({"hugepages-1Gi": "2Gi"})
-                container.resources.requests.update({"hugepages-1Gi": "2Gi"})
+        if any(
+            [
+                requested_volume.volume.emptyDir.medium == "HugePages"
+                for requested_volume in requested_volumes
+            ]
+        ):
+            container.resources.limits.update({"hugepages-1Gi": "2Gi"})
+            container.resources.requests.update({"hugepages-1Gi": "2Gi"})
         statefulset_delta = StatefulSet(
             spec=StatefulSetSpec(
                 selector=statefulset.spec.selector,  # type: ignore[attr-defined]
@@ -225,11 +228,7 @@ class KubernetesClient:
                     spec=PodSpec(
                         containers=[container],
                         volumes=[
-                            Volume(
-                                name=additional_volume.name,
-                                emptyDir=EmptyDirVolumeSource(medium=additional_volume.medium),
-                            )
-                            for additional_volume in additional_volumes
+                            requested_volume.volume for requested_volume in requested_volumes
                         ],
                     ),
                 ),
@@ -238,119 +237,143 @@ class KubernetesClient:
         try:
             self.client.patch(
                 res=StatefulSet,
-                name=name,
+                name=statefulset_name,
                 obj=statefulset_delta,
                 patch_type=PatchType.APPLY,
                 namespace=self.namespace,
                 field_manager=self.__class__.__name__,
             )
         except ApiError:
-            raise KubernetesAdditionalVolumesError(f"Could not patch statefulset {name}")
-        logger.info("Additional volumes added to %s statefulset", name)
+            raise KubernetesRequestedVolumesError(
+                f"Could not patch statefulset {statefulset_name}"
+            )
+        logger.info("Requested volumes added to %s statefulset", statefulset_name)
 
     def remove_volumes(
         self,
-        name: str,
-        additional_volumes: list[AdditionalVolume],
+        statefulset_name: str,
+        requested_volumes: list[RequestedVolume],
         container_name: str,
     ) -> None:
-        if not additional_volumes:
-            logger.info("No additional volumes were provided")
+        """Replaces a statefulset removing requested volumes.
+
+        Args:
+            statefulset_name: Statefulset name
+            requested_volumes: List of requested volumes
+            container_name: Container name
+        """
+        if not requested_volumes:
+            logger.info("No requested volumes were provided")
             return
         try:
-            statefulset = self.client.get(res=StatefulSet, name=name, namespace=self.namespace)
+            statefulset = self.client.get(
+                res=StatefulSet, name=statefulset_name, namespace=self.namespace
+            )
         except ApiError:
-            raise KubernetesAdditionalVolumesError(f"Could not get statefulset {name}")
+            raise KubernetesRequestedVolumesError(f"Could not get statefulset {statefulset_name}")
         containers: list[Container] = statefulset.spec.template.spec.containers
-        additional_volumes_names = [
-            additional_volume.name for additional_volume in additional_volumes
+        requested_volumes_mounts = [
+            requested_volume.volume_mount for requested_volume in requested_volumes
         ]
-        hugepages_volume = False
-        if "hugepages" in additional_volumes_names:
-            hugepages_volume = True
-        for container in containers:
-            if container.name == container_name:
-                container.volumeMounts = [
-                    item
-                    for item in container.volumeMounts
-                    if item.name not in additional_volumes_names
-                ]
-                if hugepages_volume:
-                    try:
-                        del container.resources.limits["hugepages-1Gi"]
-                        del container.resources.requests["hugepages-1Gi"]
-                    except KeyError:
-                        pass
+        container = next(container for container in containers if container.name == container_name)
+        container.volumeMounts = [
+            item for item in container.volumeMounts if item not in requested_volumes_mounts
+        ]
+        if any(
+            [
+                requested_volume.volume.emptyDir.medium == "HugePages"
+                for requested_volume in requested_volumes
+            ]
+        ):
+            try:
+                del container.resources.limits["hugepages-1Gi"]
+                del container.resources.requests["hugepages-1Gi"]
+            except KeyError:
+                pass
         statefulset_volumes = statefulset.spec.template.spec.volumes
+        requested_volumes_volumes = [
+            requested_volume.volume for requested_volume in requested_volumes
+        ]
         statefulset.spec.template.spec.volumes = [
-            item for item in statefulset_volumes if item.name not in additional_volumes_names
+            item for item in statefulset_volumes if item not in requested_volumes_volumes
         ]
         try:
             self.client.replace(
-                name=name,
+                name=statefulset_name,
                 obj=statefulset,
                 namespace=self.namespace,
                 field_manager=self.__class__.__name__,
             )
         except ApiError:
-            raise KubernetesAdditionalVolumesError(f"Could not replace statefulset {name}")
-        logger.info("Additional volumes removed from %s statefulset", name)
-
-    def delete_pod(self, pod_name: str) -> None:
-        """Deleting given pod.
-
-        Args:
-            pod_name (str): Pod name
-
-        """
-        self.client.delete(Pod, pod_name, namespace=self.namespace)
+            raise KubernetesRequestedVolumesError(
+                f"Could not replace statefulset {statefulset_name}"
+            )
+        logger.info("Requested volumes removed from %s statefulset", statefulset_name)
 
 
-class KubernetesVolumesLib(Object):
-    """Class to be instantiated by charms requiring additional volumes."""
+class KubernetesVolumesPatchLib:
+    """Class to be instantiated by charms requiring requested volumes."""
 
     def __init__(
         self,
-        charm: CharmBase,
-        additional_volumes: list[AdditionalVolume],
+        namespace: str,
+        application_name: str,
+        unit_name: str,
         container_name: str,
     ):
-        """Constructor for the KubernetesAdditionalVolumesCharmLib.
+        """Constructor for the KubernetesVolumesPatchLib.
 
         Args:
-            charm: Charm object
-            additional_volumes: List of AdditionalVolume.
+            namespace: Namespace name
+            application_name: Charm application name
+            unit_name: Unit name
             container_name: Container name
         """
-        super().__init__(charm, "kubernetes-additional volumes")
-        self.kubernetes = KubernetesClient(namespace=self.model.name)
-        self.additional_volumes = additional_volumes
+        self.kubernetes = KubernetesClient(namespace=namespace)
+        self.model_name = namespace
+        self.application_name = application_name
+        self.unit_name = unit_name
         self.container_name = container_name
-        # self.framework.observe(charm.on.remove, self._on_remove)
 
-    def add_additional_volumes(self) -> None:
-        """Creates additional volumes and patches statefulset."""
-        if not self.is_ready():
-            self.kubernetes.patch_volumes(
-                name=self.model.app.name,
-                additional_volumes=self.additional_volumes,
-                container_name=self.container_name,
-            )
+    def add_requested_volumes(self, requested_volumes, container_name) -> None:
+        """Creates volumes and patches statefulset.
 
-    def remove_additional_volumes(self) -> None:
-        """Deletes additional volumes from statefulset and pod."""
-        if self.is_ready():
-            self.kubernetes.remove_volumes(
-                name=self.model.app.name,
-                additional_volumes=self.additional_volumes,
-                container_name=self.container_name,
-            )
+        Args:
+            requested_volumes: List of volumes to add to the statefulset
+            container_name: Container name
+        """
+        self.kubernetes.patch_volumes(
+            statefulset_name=self.application_name,
+            requested_volumes=requested_volumes,
+            container_name=container_name,
+        )
 
-    def _pod_is_ready(self) -> bool:
-        """Returns whether pod is ready with additional volumes."""
+    def remove_requested_volumes(
+        self,
+        requested_volumes: list[RequestedVolume],
+        container_name: str,
+    ) -> None:
+        """Deletes volumes from statefulset and pod.
+
+        Args:
+            requested_volumes: List of volumes to add to the statefulset
+            container_name: Container name
+        """
+        self.kubernetes.remove_volumes(
+            statefulset_name=self.application_name,
+            requested_volumes=requested_volumes,
+            container_name=container_name,
+        )
+
+    def _pod_is_ready(self, requested_volumes: list[RequestedVolume]) -> bool:
+        """Returns whether pod is ready with requested volumes.
+
+        Args:
+            requested_volumes: List of volumes to add to the statefulset
+        """
         return self.kubernetes.pod_is_ready(
             pod_name=self._pod,
-            additional_volumes=self.additional_volumes,
+            requested_volumes=requested_volumes,
             container_name=self.container_name,
         )
 
@@ -361,30 +384,32 @@ class KubernetesVolumesLib(Object):
         Returns:
             str: A string containing the name of the current unit's pod.
         """
-        return "-".join(self.model.unit.name.rsplit("/", 1))
+        return "-".join(self.unit_name.rsplit("/", 1))
 
-    def _statefulset_is_patched(self) -> bool:
-        """Returns whether statefuset is patched with additional volumes."""
+    def _statefulset_is_patched(self, requested_volumes: list[RequestedVolume]) -> bool:
+        """Returns whether statefuset is patched with requested volumes.
+
+        Args:
+            requested_volumes: List of volumes to add to the statefulset
+        """
         return self.kubernetes.statefulset_is_patched(
-            name=self.model.app.name,
-            additional_volumes=self.additional_volumes,
-            container_name=self.container_name,
+            statefulset_name=self.application_name,
+            requested_volumes=requested_volumes,
         )
 
-    def is_ready(self) -> bool:
-        """Returns whether AdditionalVolumes is ready.
+    def is_ready(self, requested_volumes: list[RequestedVolume]) -> bool:
+        """Returns whether RequestedVolumes is ready.
 
         Validates that the statefulset is
-        patched with the appropriate additional volumes and that the pod
-        also contains the same additional volumes and resource limits.
+        patched with the appropriate requested volumes and that the pod
+        also contains the same requested volumes and resource limits.
+
+        Args:
+            requested_volumes: List of volumes to add to the statefulset
 
         Returns:
-            bool: Whether AdditionalVolumes is ready
+            bool: Whether RequestedVolumes is ready
         """
-        statefulset_is_patched = self._statefulset_is_patched()
-        pod_is_ready = self._pod_is_ready()
+        statefulset_is_patched = self._statefulset_is_patched(requested_volumes)
+        pod_is_ready = self._pod_is_ready(requested_volumes)
         return statefulset_is_patched and pod_is_ready
-
-    def delete_pod(self) -> None:
-        """Delete the pod."""
-        self.kubernetes.delete_pod(self._pod)
