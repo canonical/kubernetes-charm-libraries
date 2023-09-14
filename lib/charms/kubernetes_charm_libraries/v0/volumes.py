@@ -262,18 +262,22 @@ class KubernetesClient:
         except ApiError:
             raise KubernetesAdditionalVolumesError(f"Could not get statefulset {name}")
         containers: list[Container] = statefulset.spec.template.spec.containers
+        additional_volumes_names = [additional_volume.name for additional_volume in additional_volumes]
         for container in containers:
             if container.name == container_name:
-                volumes_mounts_names = [volume_mount.name for volume_mount in container.volumeMounts]
-                for additional_volume in additional_volumes:
-                    if additional_volume.name in volumes_mounts_names:
-                        # TODO
-                        pass
-        volumes_names: list[str] = [volume.name for volume in statefulset.spec.template.spec.volumes]
-        for additional_volume in additional_volumes:
-            if additional_volume.name in volumes_names:
-                # TODO
-                pass
+                container.volumeMounts = [item for item in container.volumeMounts if item.name not in additional_volumes_names]
+        statefulset_volumes = statefulset.spec.template.spec.volumes
+        statefulset.spec.template.spec.volumes = [item for item in statefulset_volumes if item.name not in additional_volumes_names]
+        try:
+            self.client.replace(
+                name=name,
+                obj=statefulset,
+                namespace=self.namespace,
+                field_manager=self.__class__.__name__,
+            )
+        except ApiError:
+            raise KubernetesAdditionalVolumesError(f"Could not replace statefulset {name}")
+        logger.info("Additional volumes removed from %s statefulset", name)
 
     def delete_pod(self, pod_name: str) -> None:
         """Deleting given pod.
