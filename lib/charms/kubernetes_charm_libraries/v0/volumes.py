@@ -112,7 +112,7 @@ class KubernetesClient:
                 )
             return False
         return self._statefulset_volumes_are_patched(
-            statefulset_spec=statefulset.spec,    # type: ignore[attr-defined]
+            statefulset_spec=statefulset.spec,  # type: ignore[attr-defined]
             requested_volumes=requested_volumes,
         )
 
@@ -271,7 +271,7 @@ class KubernetesClient:
             )
         except ApiError:
             raise KubernetesRequestedVolumesError(f"Could not get statefulset {statefulset_name}")
-        containers: list[Container] = statefulset.spec.template.spec.containers    # type: ignore[attr-defined]
+        containers: list[Container] = statefulset.spec.template.spec.containers  # type: ignore[attr-defined]  # noqa: E501
         requested_volumes_mounts = [
             requested_volume.volume_mount for requested_volume in requested_volumes
         ]
@@ -290,15 +290,15 @@ class KubernetesClient:
                 del container.resources.requests["hugepages-1Gi"]
             except KeyError:
                 pass
-        statefulset_volumes = statefulset.spec.template.spec.volumes    # type: ignore[attr-defined]
+        statefulset_volumes = statefulset.spec.template.spec.volumes  # type: ignore[attr-defined]  # noqa: E501
         requested_volumes_volumes = [
             requested_volume.volume for requested_volume in requested_volumes
         ]
-        statefulset.spec.template.spec.volumes = [    # type: ignore[attr-defined]
+        statefulset.spec.template.spec.volumes = [  # type: ignore[attr-defined]
             item for item in statefulset_volumes if item not in requested_volumes_volumes
         ]
         try:
-            self.client.replace(    # type: ignore[call-overload]
+            self.client.replace(  # type: ignore[call-overload]
                 name=statefulset_name,
                 obj=statefulset,
                 namespace=self.namespace,
