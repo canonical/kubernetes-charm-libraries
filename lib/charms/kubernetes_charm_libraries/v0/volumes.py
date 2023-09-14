@@ -18,6 +18,7 @@ from lightkube.models.core_v1 import (
     EmptyDirVolumeSource,
     PodSpec,
     PodTemplateSpec,
+    ResourceRequirements,
     Volume,
     VolumeMount,
 )
@@ -207,11 +208,15 @@ class KubernetesClient:
         container = Container(
             name=container_name,
             volumeMounts=[],
+            resources=ResourceRequirements(limits={}, requests={}),
         )
-        container.volumeMounts += [
-            VolumeMount(name=additional_volume.name, mountPath=additional_volume.mount_point)
-            for additional_volume in additional_volumes
-        ]
+        for additional_volume in additional_volumes:
+            container.volumeMounts.append(
+                VolumeMount(name=additional_volume.name, mountPath=additional_volume.mount_point)
+            )
+            if additional_volume.name == "hugepages":
+                container.resources.limits.update({"hugepages-1Gi": "2Gi"})
+                container.resources.requests.update({"hugepages-1Gi": "2Gi"})
         statefulset_delta = StatefulSet(
             spec=StatefulSetSpec(
                 selector=statefulset.spec.selector,  # type: ignore[attr-defined]
@@ -260,6 +265,9 @@ class KubernetesClient:
         additional_volumes_names = [
             additional_volume.name for additional_volume in additional_volumes
         ]
+        hugepages_volume = False
+        if "hugepages" in additional_volumes_names:
+            hugepages_volume = True
         for container in containers:
             if container.name == container_name:
                 container.volumeMounts = [
@@ -267,6 +275,12 @@ class KubernetesClient:
                     for item in container.volumeMounts
                     if item.name not in additional_volumes_names
                 ]
+                if hugepages_volume:
+                    try:
+                        del container.resources.limits["hugepages-1Gi"]
+                        del container.resources.requests["hugepages-1Gi"]
+                    except KeyError:
+                        pass
         statefulset_volumes = statefulset.spec.template.spec.volumes
         statefulset.spec.template.spec.volumes = [
             item for item in statefulset_volumes if item.name not in additional_volumes_names
