@@ -4,7 +4,7 @@
 """Charm Library used to leverage the Volumes Kubernetes in charms."""
 import logging
 from dataclasses import dataclass
-from typing import Iterable, Union
+from typing import Iterable
 
 from lightkube import Client
 from lightkube.core.exceptions import ApiError
@@ -54,8 +54,7 @@ class KubernetesClient:
         requested_volumes: Iterable[RequestedVolume],
         container_name: str,
     ) -> bool:
-        """Returns whether pod has the requisite requested volumes
-        and resources (when required).
+        """Returns whether pod has the requisite requested volumes and resources (when required).
 
         Args:
             pod_name: Pod name
@@ -82,7 +81,7 @@ class KubernetesClient:
             return False
         pod_has_volumemounts = self._pod_volumemounts_contain_requested_volumes(
             requested_volumes=requested_volumes,
-            containers=pod.spec.containers,
+            containers=pod.spec.containers,  # type: ignore[attr-defined]
             container_name=container_name,
         )
         pod_has_resources = True
@@ -92,7 +91,7 @@ class KubernetesClient:
                 requests={"hugepages-1Gi": "2Gi"},
             )
             pod_has_resources = self._pod_resources_contain_requests_and_limits(
-                containers=pod.spec.containers,
+                containers=pod.spec.containers,  # type: ignore[attr-defined]
                 container_name=container_name,
                 requested_resources=resources,
             )
@@ -168,7 +167,9 @@ class KubernetesClient:
         Returns:
             bool
         """
-        container = next((container for container in containers if container.name == container_name), None)
+        container = next(
+            (container for container in containers if container.name == container_name), None
+        )  # noqa: E501
         if container:
             return all(
                 [
@@ -194,7 +195,9 @@ class KubernetesClient:
         Returns:
             bool
         """
-        container = next((container for container in containers if container.name == container_name), None)
+        container = next(
+            (container for container in containers if container.name == container_name), None
+        )  # noqa: E501
         if container:
             if not container.resources.limits or not container.resources.requests:
                 return False
@@ -292,7 +295,9 @@ class KubernetesClient:
         requested_volumes_mounts = [
             requested_volume.volume_mount for requested_volume in requested_volumes
         ]
-        container = next((container for container in containers if container.name == container_name), None)
+        container = next(
+            (container for container in containers if container.name == container_name), None
+        )  # noqa: E501
         if container:
             container.volumeMounts = [
                 item for item in container.volumeMounts if item not in requested_volumes_mounts
