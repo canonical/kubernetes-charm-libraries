@@ -138,7 +138,6 @@ class TestKubernetes(unittest.TestCase):
     def test_given_no_requested_volumes_when_statefulset_is_patched_then_returns_false(
         self, patch_get
     ):
-        container_name = "whatever container name"
         statefulset_name = "whatever name"
         requested_volumes = [
             RequestedVolume(
@@ -165,29 +164,13 @@ class TestKubernetes(unittest.TestCase):
             statefulset_name=statefulset_name,
             requested_volumes=requested_volumes,
         )
-        patch_get.return_value = PodTemplateSpec(
-            spec=PodSpec(
-                containers=[
-                    Container(
-                        name=container_name,
-                        volumeMounts=[],
-                    )
-                ],
-                volumes=[],
-            )
-        )
-        pod_is_patched = self.kubernetes_volumes.pod_is_ready(
-            pod_name="a pod", requested_volumes=requested_volumes, container_name=container_name
-        )
 
         self.assertFalse(statefulset_is_patched)
-        self.assertFalse(pod_is_patched)
 
     @patch("lightkube.core.client.Client.get")
     def test_given_requested_volumes_are_different_when_statefulset_is_patched_then_returns_false(
         self, patch_get
     ):
-        container_name = "whatever container name"
         statefulset_name = "whatever name"
         requested_volumes_in_statefulset = [
             RequestedVolume(
@@ -225,36 +208,13 @@ class TestKubernetes(unittest.TestCase):
             statefulset_name=statefulset_name,
             requested_volumes=requested_volumes,
         )
-        patch_get.return_value = PodTemplateSpec(
-            spec=PodSpec(
-                containers=[
-                    Container(
-                        name=container_name,
-                        volumeMounts=[
-                            requested_volume.volume_mount
-                            for requested_volume in requested_volumes_in_statefulset
-                        ],
-                        resources=ResourceRequirements(
-                            limits={"hugepages-1Gi": "2Gi"},
-                            requests={"hugepages-1Gi": "2Gi"},
-                        ),
-                    )
-                ],
-                volumes=[],
-            )
-        )
-        pod_is_patched = self.kubernetes_volumes.pod_is_ready(
-            pod_name="a pod", requested_volumes=requested_volumes, container_name=container_name
-        )
 
         self.assertFalse(statefulset_is_patched)
-        self.assertFalse(pod_is_patched)
 
     @patch("lightkube.core.client.Client.get")
     def test_given_requested_volumes_are_already_present_when_statefulset_is_patched_then_returns_true(  # noqa: E501
         self, patch_get
     ):
-        container_name = "whatever container name"
         statefulset_name = "whatever name"
         requested_volumes = [
             RequestedVolume(
@@ -270,19 +230,7 @@ class TestKubernetes(unittest.TestCase):
                 serviceName="",
                 template=PodTemplateSpec(
                     spec=PodSpec(
-                        containers=[
-                            Container(
-                                name=container_name,
-                                volumeMounts=[
-                                    requested_volume.volume_mount
-                                    for requested_volume in requested_volumes
-                                ],
-                                resources=ResourceRequirements(
-                                    limits={"hugepages-1Gi": "2Gi"},
-                                    requests={"hugepages-1Gi": "2Gi"},
-                                ),
-                            )
-                        ],
+                        containers=[],
                         volumes=[
                             requested_volume.volume for requested_volume in requested_volumes
                         ],
@@ -295,32 +243,11 @@ class TestKubernetes(unittest.TestCase):
             statefulset_name=statefulset_name,
             requested_volumes=requested_volumes,
         )
-        patch_get.return_value = PodTemplateSpec(
-            spec=PodSpec(
-                containers=[
-                    Container(
-                        name=container_name,
-                        volumeMounts=[
-                            requested_volume.volume_mount for requested_volume in requested_volumes
-                        ],
-                        resources=ResourceRequirements(
-                            limits={"hugepages-1Gi": "2Gi"},
-                            requests={"hugepages-1Gi": "2Gi"},
-                        ),
-                    )
-                ],
-                volumes=[],
-            )
-        )
-        pod_is_patched = self.kubernetes_volumes.pod_is_ready(
-            pod_name="a pod", requested_volumes=requested_volumes, container_name=container_name
-        )
 
         self.assertTrue(statefulset_is_patched)
-        self.assertTrue(pod_is_patched)
 
     @patch("lightkube.core.client.Client.get")
-    def test_given_k8s_get_throws_unauthorized_api_error_when_pod_is_ready_then_returns_false(
+    def test_given_k8s_get_throws_unauthorized_api_error_when_pod_is_patched_then_returns_false(
         self, patch_get
     ):
         patch_get.side_effect = ApiError(
@@ -335,16 +262,18 @@ class TestKubernetes(unittest.TestCase):
                 volume_mount=VolumeMount(name="hugepage-1", mountPath="/some/other/mountpoint"),
             )
         ]
-        is_ready = self.kubernetes_volumes.pod_is_ready(
+        is_patched = self.kubernetes_volumes.pod_is_patched(
             pod_name="pod name",
             requested_volumes=requested_volumes,
             container_name="container-name",
         )
 
-        self.assertFalse(is_ready)
+        self.assertFalse(is_patched)
 
     @patch("lightkube.core.client.Client.get")
-    def test_given_requested_volume_not_set_when_pod_is_ready_then_returns_false(self, patch_get):
+    def test_given_requested_volume_not_set_when_pod_is_patched_then_returns_false(
+        self, patch_get
+    ):  # noqa: E501
         patch_get.return_value = Pod(
             spec=PodSpec(
                 containers=[
@@ -367,16 +296,16 @@ class TestKubernetes(unittest.TestCase):
             )
         ]
 
-        is_ready = self.kubernetes_volumes.pod_is_ready(
+        is_patched = self.kubernetes_volumes.pod_is_patched(
             pod_name="pod name",
             requested_volumes=requested_volumes,
             container_name="container-name",
         )
 
-        self.assertFalse(is_ready)
+        self.assertFalse(is_patched)
 
     @patch("lightkube.core.client.Client.get")
-    def test_given_pod_is_ready_when_pod_is_ready_then_returns_true(self, patch_get):
+    def test_given_pod_is_patched_when_pod_is_patched_then_returns_true(self, patch_get):
         requested_volumes = [
             RequestedVolume(
                 volume=Volume(
@@ -394,19 +323,22 @@ class TestKubernetes(unittest.TestCase):
                         volumeMounts=[
                             requested_volume.volume_mount for requested_volume in requested_volumes
                         ],
+                        resources=ResourceRequirements(
+                            limits={"hugepages-1Gi": "2Gi"}, requests={"hugepages-1Gi": "2Gi"}
+                        ),
                     ),
                 ],
                 volumes=[requested_volume.volume for requested_volume in requested_volumes],
             ),
         )
 
-        is_ready = self.kubernetes_volumes.pod_is_ready(
+        is_patched = self.kubernetes_volumes.pod_is_patched(
             pod_name="pod name",
             requested_volumes=requested_volumes,
             container_name=container_name,
         )
 
-        self.assertTrue(is_ready)
+        self.assertTrue(is_patched)
 
 
 class TestKubernetesVolumesPatchLib(unittest.TestCase):
@@ -420,29 +352,29 @@ class TestKubernetesVolumesPatchLib(unittest.TestCase):
         )
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
-    @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.pod_is_ready")
+    @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.pod_is_patched")
     @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched")
-    def test_given_pod_not_ready_when_is_ready_then_return_false(
+    def test_given_pod_not_ready_when_is_patched_then_return_false(
         self,
         patch_statefulset_is_patched,
-        patch_pod_is_ready,
+        patch_pod_is_patched,
     ):
         patch_statefulset_is_patched.return_value = True
-        patch_pod_is_ready.return_value = False
+        patch_pod_is_patched.return_value = False
 
-        is_ready = self.kubernetes_volumes_patch_lib.is_ready(requested_volumes=[])
-        self.assertFalse(is_ready)
+        is_patched = self.kubernetes_volumes_patch_lib.is_patched(requested_volumes=[])
+        self.assertFalse(is_patched)
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
-    @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.pod_is_ready")
+    @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.pod_is_patched")
     @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched")
-    def test_given_pod_is_ready_when_is_ready_then_return_true(
+    def test_given_pod_is_patched_when_is_patched_then_return_true(
         self,
         patch_statefulset_is_patched,
-        patch_pod_is_ready,
+        patch_pod_is_patched,
     ):
         patch_statefulset_is_patched.return_value = True
-        patch_pod_is_ready.return_value = True
+        patch_pod_is_patched.return_value = True
 
-        is_ready = self.kubernetes_volumes_patch_lib.is_ready(requested_volumes=[])
-        self.assertTrue(is_ready)
+        is_patched = self.kubernetes_volumes_patch_lib.is_patched(requested_volumes=[])
+        self.assertTrue(is_patched)
