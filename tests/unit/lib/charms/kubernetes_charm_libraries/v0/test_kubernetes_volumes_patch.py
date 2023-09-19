@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 import httpx
-from charms.kubernetes_charm_libraries.v0.volumes import (  # type: ignore[import]
+from charms.kubernetes_charm_libraries.v0.kubernetes_volumes_patch import (  # type: ignore[import]
     KubernetesClient,
     KubernetesVolumesPatchLib,
     RequestedVolume,
@@ -26,7 +26,7 @@ from lightkube.resources.apps_v1 import StatefulSet as StatefulSetResource
 from lightkube.resources.core_v1 import Pod
 from lightkube.types import PatchType
 
-VOLUMES_LIBRARY_PATH = "charms.kubernetes_charm_libraries.v0.volumes"
+VOLUMES_LIBRARY_PATH = "charms.kubernetes_charm_libraries.v0.kubernetes_volumes_patch"
 
 
 class TestKubernetes(unittest.TestCase):

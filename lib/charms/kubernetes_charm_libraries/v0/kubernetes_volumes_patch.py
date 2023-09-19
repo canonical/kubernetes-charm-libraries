@@ -23,6 +23,13 @@ from lightkube.types import PatchType
 
 logger = logging.getLogger(__name__)
 
+HUGEPAGES_RESOURCES_LIMITS = {"hugepages-1Gi": "2Gi"}
+HUGEPAGES_RESOURCES_REQUESTS = {"hugepages-1Gi": "2Gi"}
+HUGEPAGES_RESOURCES = ResourceRequirements(
+    limits=HUGEPAGES_RESOURCES_LIMITS,
+    requests=HUGEPAGES_RESOURCES_REQUESTS,
+)
+
 
 @dataclass
 class RequestedVolume:
@@ -77,17 +84,11 @@ class KubernetesClient:
             containers=pod.spec.containers,  # type: ignore[attr-defined]
             container_name=container_name,
         )
-        pod_has_resources = True
-        if self._requested_volumes_have_hugepages(requested_volumes=requested_volumes):
-            resources = ResourceRequirements(
-                limits={"hugepages-1Gi": "2Gi"},
-                requests={"hugepages-1Gi": "2Gi"},
-            )
-            pod_has_resources = self._pod_resources_contain_requests_and_limits(
-                containers=pod.spec.containers,  # type: ignore[attr-defined]
-                container_name=container_name,
-                requested_resources=resources,
-            )
+        pod_has_resources = self._pod_resources_are_set(
+            containers=pod.spec.containers,  # type: ignore[attr-defined]
+            container_name=container_name,
+            requested_volumes=requested_volumes,
+        )
         return pod_has_volumemounts and pod_has_resources
 
     def statefulset_is_patched(
@@ -162,7 +163,7 @@ class KubernetesClient:
         """
         container = next(
             (container for container in containers if container.name == container_name), None
-        )  # noqa: E501
+        )
         if container:
             return all(
                 [
@@ -172,32 +173,34 @@ class KubernetesClient:
             )
         return False
 
-    @staticmethod
-    def _pod_resources_contain_requests_and_limits(
+    def _pod_resources_are_set(
+        self,
         containers: Iterable[Container],
         container_name: str,
-        requested_resources: ResourceRequirements,
+        requested_volumes: Iterable[RequestedVolume],
     ) -> bool:
         """Returns whether container spec contains the expected resources requests and limits.
 
         Args:
             containers: Iterable of Containers
             container_name: Container name
-            requested_resources: Requests we expect to be set
+            requested_volumes: Iterable of requested volumes
 
         Returns:
             bool
         """
         container = next(
             (container for container in containers if container.name == container_name), None
-        )  # noqa: E501
+        )
+        if not self._hugepages_in_requested_volumes(requested_volumes):
+            return True
         if container:
             if not container.resources.limits or not container.resources.requests:
                 return False
-            for limit, value in requested_resources.limits.items():
+            for limit, value in HUGEPAGES_RESOURCES_LIMITS.items():
                 if container.resources.limits.get(limit) != value:
                     return False
-            for request, value in requested_resources.requests.items():
+            for request, value in HUGEPAGES_RESOURCES_REQUESTS.items():
                 if container.resources.requests.get(request) != value:
                     return False
             return True
@@ -217,7 +220,7 @@ class KubernetesClient:
             container_name: Container name
         """
         if not requested_volumes:
-            logger.info("No requested volumes were provided")
+            logger.warning("No requested volumes were provided")
             return
         try:
             statefulset = self.client.get(
@@ -230,9 +233,8 @@ class KubernetesClient:
             volumeMounts=[requested_volume.volume_mount for requested_volume in requested_volumes],
             resources=ResourceRequirements(limits={}, requests={}),
         )
-        if self._requested_volumes_have_hugepages(requested_volumes):
-            container.resources.limits.update({"hugepages-1Gi": "2Gi"})
-            container.resources.requests.update({"hugepages-1Gi": "2Gi"})
+        if self._hugepages_in_requested_volumes(requested_volumes):
+            container.resources = HUGEPAGES_RESOURCES
         statefulset_delta = StatefulSet(
             spec=StatefulSetSpec(
                 selector=statefulset.spec.selector,  # type: ignore[attr-defined]
@@ -276,7 +278,7 @@ class KubernetesClient:
             container_name: Container name
         """
         if not requested_volumes:
-            logger.info("No requested volumes were provided")
+            logger.warning("No requested volumes were provided")
             return
         try:
             statefulset = self.client.get(
@@ -290,17 +292,16 @@ class KubernetesClient:
         ]
         container = next(
             (container for container in containers if container.name == container_name), None
-        )  # noqa: E501
+        )
         if container:
             container.volumeMounts = [
                 item for item in container.volumeMounts if item not in requested_volumes_mounts
             ]
-            if self._requested_volumes_have_hugepages(requested_volumes):
-                try:
-                    del container.resources.limits["hugepages-1Gi"]
-                    del container.resources.requests["hugepages-1Gi"]
-                except KeyError:
-                    pass
+            if self._hugepages_in_requested_volumes(requested_volumes):
+                for limit in HUGEPAGES_RESOURCES_LIMITS.keys():
+                    container.resources.limits.pop(limit, None)
+                for request in HUGEPAGES_RESOURCES_REQUESTS.keys():
+                    container.resources.requests.pop(request, None)
             statefulset_volumes = statefulset.spec.template.spec.volumes  # type: ignore[attr-defined]  # noqa: E501
             requested_volumes_volumes = [
                 requested_volume.volume for requested_volume in requested_volumes
@@ -322,7 +323,7 @@ class KubernetesClient:
             logger.info("Requested volumes removed from %s statefulset", statefulset_name)
 
     @staticmethod
-    def _requested_volumes_have_hugepages(requested_volumes: Iterable[RequestedVolume]) -> bool:
+    def _hugepages_in_requested_volumes(requested_volumes: Iterable[RequestedVolume]) -> bool:
         """Returns whether requested volumes contain an HugePages volume.
 
         Args:
@@ -363,7 +364,7 @@ class KubernetesVolumesPatchLib:
         self.unit_name = unit_name
         self.container_name = container_name
 
-    def add_requested_volumes(
+    def add_volumes(
         self,
         requested_volumes: Iterable[RequestedVolume],
         container_name: str,
@@ -380,7 +381,7 @@ class KubernetesVolumesPatchLib:
             container_name=container_name,
         )
 
-    def remove_requested_volumes(
+    def remove_volumes(
         self,
         requested_volumes: Iterable[RequestedVolume],
         container_name: str,
