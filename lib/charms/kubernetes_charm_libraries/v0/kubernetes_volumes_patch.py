@@ -47,12 +47,35 @@ class KubernetesRequestedVolumesError(Exception):
         super().__init__(self.message)
 
 
+class ContainerNotFoundError(ValueError):
+    """Raised when a given container does not exist in the iterable of containers."""
+
+
 class KubernetesClient:
     """Class containing all the Kubernetes specific calls."""
 
     def __init__(self, namespace: str):
         self.client = Client()
         self.namespace = namespace
+
+    @classmethod
+    def _get_container(cls, container_name: str, containers: Iterable[Container]) -> Container:
+        """Find the container from the container list, assuming list is unique by name.
+
+        Args:
+            containers: Iterable of containers
+            container_name: Container name
+
+        Raises:
+            ContainerNotFoundError, if the user-provided container name does not exist in the list.
+
+        Returns:
+            Container: An instance of :class:`Container` whose name matches the given name.
+        """
+        try:
+            return next(iter(filter(lambda ctr: ctr.name == container_name, containers)))
+        except StopIteration:
+            raise ContainerNotFoundError(f"Container '{container_name}' not found")
 
     def pod_is_patched(
         self,
@@ -145,8 +168,8 @@ class KubernetesClient:
             ]
         )
 
-    @staticmethod
     def _pod_volumemounts_contain_requested_volumes(
+        self,
         containers: Iterable[Container],
         container_name: str,
         requested_volumes: Iterable[RequestedVolume],
@@ -161,17 +184,13 @@ class KubernetesClient:
         Returns:
             bool
         """
-        container = next(
-            (container for container in containers if container.name == container_name), None
+        container = self._get_container(container_name=container_name, containers=containers)
+        return all(
+            [
+                requested_volume.volume_mount in container.volumeMounts
+                for requested_volume in requested_volumes
+            ]
         )
-        if container:
-            return all(
-                [
-                    requested_volume.volume_mount in container.volumeMounts
-                    for requested_volume in requested_volumes
-                ]
-            )
-        return False
 
     def _pod_resources_are_set(
         self,
@@ -189,22 +208,18 @@ class KubernetesClient:
         Returns:
             bool
         """
-        container = next(
-            (container for container in containers if container.name == container_name), None
-        )
+        container = self._get_container(container_name=container_name, containers=containers)
         if not self._hugepages_in_requested_volumes(requested_volumes):
             return True
-        if container:
-            if not container.resources.limits or not container.resources.requests:
+        if not container.resources.limits or not container.resources.requests:
+            return False
+        for limit, value in HUGEPAGES_RESOURCES_LIMITS.items():
+            if container.resources.limits.get(limit) != value:
                 return False
-            for limit, value in HUGEPAGES_RESOURCES_LIMITS.items():
-                if container.resources.limits.get(limit) != value:
-                    return False
-            for request, value in HUGEPAGES_RESOURCES_REQUESTS.items():
-                if container.resources.requests.get(request) != value:
-                    return False
-            return True
-        return False
+        for request, value in HUGEPAGES_RESOURCES_REQUESTS.items():
+            if container.resources.requests.get(request) != value:
+                return False
+        return True
 
     def patch_volumes(
         self,
@@ -290,37 +305,34 @@ class KubernetesClient:
         requested_volumes_mounts = [
             requested_volume.volume_mount for requested_volume in requested_volumes
         ]
-        container = next(
-            (container for container in containers if container.name == container_name), None
-        )
-        if container:
-            container.volumeMounts = [
-                item for item in container.volumeMounts if item not in requested_volumes_mounts
-            ]
-            if self._hugepages_in_requested_volumes(requested_volumes):
-                for limit in HUGEPAGES_RESOURCES_LIMITS.keys():
-                    container.resources.limits.pop(limit, None)
-                for request in HUGEPAGES_RESOURCES_REQUESTS.keys():
-                    container.resources.requests.pop(request, None)
-            statefulset_volumes = statefulset.spec.template.spec.volumes  # type: ignore[attr-defined]  # noqa: E501
-            requested_volumes_volumes = [
-                requested_volume.volume for requested_volume in requested_volumes
-            ]
-            statefulset.spec.template.spec.volumes = [  # type: ignore[attr-defined]
-                item for item in statefulset_volumes if item not in requested_volumes_volumes
-            ]
-            try:
-                self.client.replace(  # type: ignore[call-overload]
-                    name=statefulset_name,
-                    obj=statefulset,
-                    namespace=self.namespace,
-                    field_manager=self.__class__.__name__,
-                )
-            except ApiError:
-                raise KubernetesRequestedVolumesError(
-                    f"Could not replace statefulset {statefulset_name}"
-                )
-            logger.info("Requested volumes removed from %s statefulset", statefulset_name)
+        container = self._get_container(container_name=container_name, containers=containers)
+        container.volumeMounts = [
+            item for item in container.volumeMounts if item not in requested_volumes_mounts
+        ]
+        if self._hugepages_in_requested_volumes(requested_volumes):
+            for limit in HUGEPAGES_RESOURCES_LIMITS.keys():
+                container.resources.limits.pop(limit, None)
+            for request in HUGEPAGES_RESOURCES_REQUESTS.keys():
+                container.resources.requests.pop(request, None)
+        statefulset_volumes = statefulset.spec.template.spec.volumes  # type: ignore[attr-defined]  # noqa: E501
+        requested_volumes_volumes = [
+            requested_volume.volume for requested_volume in requested_volumes
+        ]
+        statefulset.spec.template.spec.volumes = [  # type: ignore[attr-defined]
+            item for item in statefulset_volumes if item not in requested_volumes_volumes
+        ]
+        try:
+            self.client.replace(  # type: ignore[call-overload]
+                name=statefulset_name,
+                obj=statefulset,
+                namespace=self.namespace,
+                field_manager=self.__class__.__name__,
+            )
+        except ApiError:
+            raise KubernetesRequestedVolumesError(
+                f"Could not replace statefulset {statefulset_name}"
+            )
+        logger.info("Requested volumes removed from %s statefulset", statefulset_name)
 
     @staticmethod
     def _hugepages_in_requested_volumes(requested_volumes: Iterable[RequestedVolume]) -> bool:
