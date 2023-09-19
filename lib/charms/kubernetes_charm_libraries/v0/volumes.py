@@ -63,13 +63,6 @@ class KubernetesClient:
 
         Returns:
             bool: Whether pod is patched.
-
-
-        statefulset.spec.template.metadata.annotations
-        pod.metadata.annotations
-
-        statefulset.spec.template.spec.containers
-        pod.spec.containers
         """
         try:
             pod = self.client.get(Pod, name=pod_name, namespace=self.namespace)
@@ -330,6 +323,14 @@ class KubernetesClient:
 
     @staticmethod
     def _requested_volumes_have_hugepages(requested_volumes: Iterable[RequestedVolume]) -> bool:
+        """Returns whether requested volumes contain an HugePages volume.
+
+        Args:
+            requested_volumes: Iterable of requested volumes
+
+        Returns:
+            bool: Whether requested volumes contain an HugePages volume
+        """
         return any(
             [
                 requested_volume.volume.emptyDir.medium == "HugePages"
@@ -367,7 +368,7 @@ class KubernetesVolumesPatchLib:
         requested_volumes: Iterable[RequestedVolume],
         container_name: str,
     ) -> None:
-        """Creates volumes and patches statefulset.
+        """Add requested volumes and patches statefulset.
 
         Args:
             requested_volumes: Iterable of volumes to add to the statefulset
@@ -387,7 +388,7 @@ class KubernetesVolumesPatchLib:
         """Deletes volumes from statefulset and pod.
 
         Args:
-            requested_volumes: Iterable of volumes to remove from the statefulset
+            requested_volumes: Iterable of volumes to remove from the statefulset and pod
             container_name: Container name
         """
         self.kubernetes.remove_volumes(
@@ -397,10 +398,13 @@ class KubernetesVolumesPatchLib:
         )
 
     def _pod_is_patched(self, requested_volumes: Iterable[RequestedVolume]) -> bool:
-        """Returns whether pod is patched with requested volumes.
+        """Returns whether pod is patched with requested volumes and resource limits.
 
         Args:
-            requested_volumes: Iterable of volumes to add to the statefulset
+            requested_volumes: Iterable of volumes to be set in the pod.
+
+        Returns:
+            bool: Whether pod is patched
         """
         return self.kubernetes.pod_is_patched(
             pod_name=self._pod,
@@ -418,10 +422,13 @@ class KubernetesVolumesPatchLib:
         return "-".join(self.unit_name.rsplit("/", 1))
 
     def _statefulset_is_patched(self, requested_volumes: Iterable[RequestedVolume]) -> bool:
-        """Returns whether statefuset is patched with requested volumes.
+        """Returns whether statefulset is patched with requested volumes.
 
         Args:
-            requested_volumes: Iterable of volumes to add to the statefulset
+            requested_volumes: Iterable of volumes to be set in the statefulset
+
+        Returns:
+            bool: Whether statefulset is patched
         """
         return self.kubernetes.statefulset_is_patched(
             statefulset_name=self.application_name,
@@ -429,17 +436,17 @@ class KubernetesVolumesPatchLib:
         )
 
     def is_patched(self, requested_volumes: Iterable[RequestedVolume]) -> bool:
-        """Returns whether RequestedVolumes is patched.
+        """Returns whether statefulset and pod are patched.
 
-        Validates that the statefulset is
-        patched with the appropriate requested volumes and that the pod
-        also contains the same requested volumes and resource limits.
+        Validates that the statefulset is patched with the appropriate
+        requested volumes and that the pod also contains the same requested
+        volumes and resource limits.
 
         Args:
             requested_volumes: Iterable of volumes to add to the statefulset
 
         Returns:
-            bool: Whether RequestedVolumes is patched
+            bool: Whether statefulset and pod are patched
         """
         statefulset_is_patched = self._statefulset_is_patched(requested_volumes)
         pod_is_patched = self._pod_is_patched(requested_volumes)
