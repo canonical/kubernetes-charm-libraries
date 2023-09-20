@@ -11,6 +11,7 @@ from charms.kubernetes_charm_libraries.v0.multus import (  # type: ignore[import
     KubernetesClient,
     KubernetesMultusCharmLib,
     KubernetesMultusError,
+    NadConfigChangedCharmEvents,
     NetworkAnnotation,
     NetworkAttachmentDefinition,
 )
@@ -612,6 +613,8 @@ class TestKubernetes(unittest.TestCase):
 
 
 class _TestCharmNoNAD(CharmBase):
+    on = NadConfigChangedCharmEvents()
+
     def __init__(self, *args):
         super().__init__(*args)
         self.network_annotations = []
@@ -620,6 +623,7 @@ class _TestCharmNoNAD(CharmBase):
             network_attachment_definitions_func=self._network_annotations_func,
             network_annotations=self.network_annotations,
             container_name="container-name",
+            refresh_event=self.on.nad_config_changed,
         )
 
     def _network_annotations_func(self) -> list[NetworkAttachmentDefinition]:
@@ -627,6 +631,8 @@ class _TestCharmNoNAD(CharmBase):
 
 
 class _TestCharmMultipleNAD(CharmBase):
+    on = NadConfigChangedCharmEvents()
+
     def __init__(self, *args):
         super().__init__(*args)
         self.container_name = "container-name"
@@ -659,6 +665,7 @@ class _TestCharmMultipleNAD(CharmBase):
             network_attachment_definitions_func=self.network_attachment_definitions_func,
             network_annotations=self.network_annotations,
             container_name=self.container_name,
+            refresh_event=self.on.nad_config_changed,
         )
 
     def network_attachment_definitions_func(self) -> list[NetworkAttachmentDefinition]:
@@ -680,7 +687,7 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition")
-    def test_given_no_nad_to_create_and_no_existing_nad_when_config_changed_then_create_is_not_called(  # noqa: E501
+    def test_given_no_nad_to_create_and_no_existing_nad_when_nad_config_changed_then_create_is_not_called(  # noqa: E501
         self, patch_create_nad, patch_existing_nads
     ):
         patch_existing_nads.return_value = []
@@ -688,7 +695,7 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
         self.addCleanup(harness.cleanup)
         harness.begin()
 
-        harness.charm.on.config_changed.emit()
+        harness.charm.on.nad_config_changed.emit()
 
         patch_create_nad.assert_not_called()
 
@@ -697,7 +704,7 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition")
-    def test_given_nads_already_exist_when_config_changed_then_create_is_not_called(
+    def test_given_nads_already_exist_when_nad_config_changed_then_create_is_not_called(
         self,
         patch_create_nad,
         patch_list_nads,
@@ -722,7 +729,7 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
             ),
         ]
 
-        harness.charm.on.config_changed.emit()
+        harness.charm.on.nad_config_changed.emit()
 
         patch_create_nad.assert_not_called()
 
@@ -731,7 +738,7 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition")
-    def test_given_nads_not_created_when_config_changed_then_nad_create_is_called(
+    def test_given_nads_not_created_when_nad_config_changed_then_nad_create_is_called(
         self, patch_create_nad, patch_list_nads
     ):
         patch_list_nads.return_value = []
@@ -739,7 +746,7 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
         self.addCleanup(harness.cleanup)
         harness.begin()
 
-        harness.charm.on.config_changed.emit()
+        harness.charm.on.nad_config_changed.emit()
 
         patch_create_nad.assert_has_calls(
             calls=[
@@ -763,7 +770,24 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition")
-    def test_given_nads_exist_but_created_by_different_charm_when_config_changed_then_nad_create_is_called(  # noqa: E501
+    def test_given_nads_not_created_when_config_changed_then_nad_create_is_not_called(
+        self, patch_create_nad, patch_list_nads
+    ):
+        patch_list_nads.return_value = []
+        harness = Harness(_TestCharmMultipleNAD)
+        self.addCleanup(harness.cleanup)
+        harness.begin()
+
+        harness.charm.on.config_changed.emit()
+
+        patch_create_nad.assert_not_called()
+
+    @patch("lightkube.core.client.GenericSyncClient", new=Mock)
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition")
+    def test_given_nads_exist_but_created_by_different_charm_when_nad_config_changed_then_nad_create_is_called(  # noqa: E501
         self, patch_create_nad, patch_list_nads
     ):
         harness = Harness(_TestCharmMultipleNAD)
@@ -786,7 +810,7 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
             ),
         ]
 
-        harness.charm.on.config_changed.emit()
+        harness.charm.on.nad_config_changed.emit()
 
         patch_create_nad.assert_has_calls(
             calls=[
@@ -813,7 +837,47 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
         f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition", new=Mock
     )
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_network_attachment_definition")
-    def test_given_nads_exist_but_are_differentwhen_config_changed_then_nad_delete_is_called(
+    def test_given_nads_exist_but_are_different_when_nad_config_changed_then_nad_delete_is_called(
+        self, patch_delete_nad, patch_list_nads
+    ):
+        harness = Harness(_TestCharmMultipleNAD)
+        self.addCleanup(harness.cleanup)
+        harness.begin()
+        patch_list_nads.return_value = [
+            NetworkAttachmentDefinition(
+                metadata=ObjectMeta(
+                    name=harness.charm.nad_1_name,
+                    labels={"app.juju.is/created-by": harness.charm.app.name},
+                ),
+                spec={"different": "spec"},
+            ),
+            NetworkAttachmentDefinition(
+                metadata=ObjectMeta(
+                    name=harness.charm.nad_2_name,
+                    labels={"app.juju.is/created-by": harness.charm.app.name},
+                ),
+                spec={"different": "spec"},
+            ),
+        ]
+
+        harness.charm.on.nad_config_changed.emit()
+
+        patch_delete_nad.assert_has_calls(
+            calls=[
+                call(name=harness.charm.nad_1_name),
+                call(name=harness.charm.nad_2_name),
+            ]
+        )
+
+    @patch("lightkube.core.client.GenericSyncClient", new=Mock)
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition", new=Mock
+    )
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_network_attachment_definition")
+    def test_given_nads_exist_but_are_different_when_config_changed_then_nad_delete_is_not_called(
         self, patch_delete_nad, patch_list_nads
     ):
         harness = Harness(_TestCharmMultipleNAD)
@@ -838,19 +902,14 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
 
         harness.charm.on.config_changed.emit()
 
-        patch_delete_nad.assert_has_calls(
-            calls=[
-                call(name=harness.charm.nad_1_name),
-                call(name=harness.charm.nad_2_name),
-            ]
-        )
+        patch_delete_nad.assert_not_called()
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition")
-    def test_given_nads_exist_but_are_differentwhen_config_changed_then_nad_create_is_called(
+    def test_given_nads_exist_but_are_different_when_nad_config_changed_then_nad_create_is_called(
         self, patch_create_nad, patch_list_nads
     ):
         harness = Harness(_TestCharmMultipleNAD)
@@ -873,7 +932,7 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
             ),
         ]
 
-        harness.charm.on.config_changed.emit()
+        harness.charm.on.nad_config_changed.emit()
 
         patch_create_nad.assert_has_calls(
             calls=[
@@ -899,7 +958,7 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
     @patch(
         f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition", new=Mock
     )
-    def test_given_nads_not_created_when_config_changed_then_patch_statefulset_is_called(
+    def test_given_nads_not_created_when_nad_config_changed_then_patch_statefulset_is_called(
         self, patch_is_statefulset_patched, patch_patch_statefulset, patch_list_nads
     ):
         patch_list_nads.return_value = []
@@ -908,7 +967,7 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
         harness.begin()
         patch_is_statefulset_patched.return_value = False
 
-        harness.charm.on.config_changed.emit()
+        harness.charm.on.nad_config_changed.emit()
 
         patch_patch_statefulset.assert_called_with(
             name=harness.charm.app.name,

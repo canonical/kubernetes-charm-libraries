@@ -3,7 +3,7 @@
 
 """Charm Library used to leverage the Multus Kubernetes CNI in charms.
 
-- On config-changed, it will:
+- On a Bound event (e.g. NadConfigChangedEvent), it will:
   - Configure the requested network attachment definitions
   - Patch the statefulset with the necessary annotations for the container to have interfaces
     that use those new network attachments.
@@ -17,10 +17,13 @@
 from charms.kubernetes_charm_libraries.v0.multus import (
     KubernetesMultusCharmLib,
     NetworkAttachmentDefinition,
-    NetworkAnnotation
+    NadConfigChangedCharmEvents,
+    NetworkAnnotation,
 )
 
 class YourCharm(CharmBase):
+
+    on = NadConfigChangedCharmEvents()
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -36,6 +39,7 @@ class YourCharm(CharmBase):
                 )
             ],
             network_attachment_definitions_func=self._network_attachment_definitions_from_config,
+            refresh_event=self.on.nad_config_changed,
         )
 
     def _network_attachment_definitions_from_config(self) -> list[NetworkAttachmentDefinition]:
@@ -66,6 +70,14 @@ class YourCharm(CharmBase):
                 },
             ),
         ]
+
+    def _on_config_changed(self, event: EventBase):
+        if not self.unit.is_leader():
+            return
+        if self._get_invalid_configs():
+            return
+        # Fire the NadConfigChangedEvent if the configs are valid.
+        self.on.nad_config_changed.emit()
 ```
 """
 
@@ -91,8 +103,8 @@ from lightkube.models.meta_v1 import ObjectMeta
 from lightkube.resources.apps_v1 import StatefulSet
 from lightkube.resources.core_v1 import Pod
 from lightkube.types import PatchType
-from ops.charm import CharmBase, EventBase, RemoveEvent
-from ops.framework import Object
+from ops.charm import CharmBase, CharmEvents, RemoveEvent
+from ops.framework import BoundEvent, EventBase, EventSource, Handle, Object
 
 # The unique Charmhub library identifier, never change it
 LIBID = "75283550e3474e7b8b5b7724d345e3c2"
@@ -102,7 +114,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 6
+LIBPATCH = 7
 
 
 logger = logging.getLogger(__name__)
@@ -466,6 +478,19 @@ class KubernetesClient:
         return True
 
 
+class NadConfigChangedEvent(EventBase):
+    """Event triggered when an existing network attachment definition is changed."""
+
+    def __init__(self, handle: Handle):
+        super().__init__(handle)
+
+
+class NadConfigChangedCharmEvents(CharmEvents):
+    """NAD config changed events."""
+
+    nad_config_changed = EventSource(NadConfigChangedEvent)
+
+
 class KubernetesMultusCharmLib(Object):
     """Class to be instantiated by charms requiring Multus networking."""
 
@@ -475,6 +500,7 @@ class KubernetesMultusCharmLib(Object):
         network_attachment_definitions_func: Callable[[], list[NetworkAttachmentDefinition]],
         network_annotations: list[NetworkAnnotation],
         container_name: str,
+        refresh_event: BoundEvent,
         cap_net_admin: bool = False,
         privileged: bool = False,
     ):
@@ -488,6 +514,8 @@ class KubernetesMultusCharmLib(Object):
             container_name: Container name
             cap_net_admin: Container requires NET_ADMIN capability
             privileged: Container requires privileged security context
+            refresh_event: A bound event which will be observed
+                to configure_multus (e.g. NadConfigChangedEvent).
         """
         super().__init__(charm, "kubernetes-multus")
         self.kubernetes = KubernetesClient(namespace=self.model.name)
@@ -496,10 +524,11 @@ class KubernetesMultusCharmLib(Object):
         self.container_name = container_name
         self.cap_net_admin = cap_net_admin
         self.privileged = privileged
-        self.framework.observe(charm.on.config_changed, self._configure_multus)
+        # Apply custom events
+        self.framework.observe(refresh_event, self._configure_multus)
         self.framework.observe(charm.on.remove, self._on_remove)
 
-    def _configure_multus(self, event: EventBase) -> None:
+    def _configure_multus(self, event: BoundEvent) -> None:
         """Creates network attachment definitions and patches statefulset.
 
         Args:
