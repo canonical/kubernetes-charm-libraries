@@ -1,10 +1,42 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Charm Library used to leverage the Volumes Kubernetes in charms."""
+"""Charm Library used to leverage the Volumes Kubernetes in charms.
+
+- On config-changed, it will:
+  - Patch the StatefulSet with the required volumes
+  - Patch the Pod with the required volume mounts and resources limits when necessary
+
+## Usage
+
+```python
+
+from charms.kubernetes_charm_libraries.v0.volumes import (
+    KubernetesMultusCharmLib,
+    RequestedVolume
+)
+
+class YourCharm(CharmBase):
+
+    def __init__(self, *args):
+        super().__init__(*args)
+        self._kubernetes_volumes_patch = KubernetesVolumesPatchCharmLib(
+            charm=self,
+            container_name=self._container_name,
+            volumes_to_add_func=self._volumes_to_add_func_from_config,
+            volumes_to_remove_func=self._volumes_to_remove_func_from_config,
+        )
+
+    def _volumes_to_add_func_from_config(self) -> list[RequestedVolume]:
+        pass
+
+    def volumes_to_remove_func_from_config(self) -> list[RequestedVolume]:
+        pass
+
+"""
 import logging
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Callable, Iterable, List, Optional, Union
 
 from lightkube import Client
 from lightkube.core.exceptions import ApiError
@@ -20,6 +52,8 @@ from lightkube.models.core_v1 import (
 from lightkube.resources.apps_v1 import StatefulSet
 from lightkube.resources.core_v1 import Pod
 from lightkube.types import PatchType
+from ops.charm import CharmBase, CharmEvents
+from ops.framework import BoundEvent, EventBase, EventSource, Handle, Object
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +79,19 @@ class KubernetesRequestedVolumesError(Exception):
     def __init__(self, message: str):
         self.message = message
         super().__init__(self.message)
+
+
+class K8sVolumePatchChangedEvent(EventBase):
+    """Charm Event triggered when a K8S volume patch is changed."""
+
+    def __init__(self, handle: Handle):
+        super().__init__(handle)
+
+
+class K8sVolumePatchChangedCharmEvents(CharmEvents):
+    """K8S volumes config changed events."""
+
+    volumes_config_changed = EventSource(K8sVolumePatchChangedEvent)
 
 
 class ContainerNotFoundError(ValueError):
@@ -352,63 +399,88 @@ class KubernetesClient:
         )
 
 
-class KubernetesVolumesPatchLib:
-    """Class to be instantiated by charms requiring requested volumes."""
+class KubernetesVolumesPatchCharmLib(Object):
+    """Class to be instantiated by charms requiring changes in volumes."""
 
     def __init__(
         self,
-        namespace: str,
-        application_name: str,
-        unit_name: str,
+        charm: CharmBase,
+        volumes_to_add_func: Callable[[], Iterable[RequestedVolume]],
+        volumes_to_remove_func: Callable[[], Iterable[RequestedVolume]],
         container_name: str,
+        refresh_event: Optional[Union[BoundEvent, List[BoundEvent]]] = None,
     ):
         """Constructor for the KubernetesVolumesPatchLib.
 
         Args:
-            namespace: Namespace name
-            application_name: Charm application name
-            unit_name: Unit name
+            charm: Charm object
+            volumes_to_add_func: A callable to a function returning a list of
+              `RequestedVolume` to be created.
+            volumes_to_remove_func: A callable to a function returning a list of
+              `RequestedVolume` to be deleted.
             container_name: Container name
+            refresh_event: an optional bound event or list of bound events which
+                will be observed to re-apply the patch.
         """
-        self.kubernetes = KubernetesClient(namespace=namespace)
-        self.model_name = namespace
-        self.application_name = application_name
-        self.unit_name = unit_name
+        super().__init__(charm, "kubernetes-requested-volumes")
+        self.kubernetes = KubernetesClient(namespace=self.model.name)
+        self.volumes_to_add_func = volumes_to_add_func
+        self.volumes_to_remove_func = volumes_to_remove_func
         self.container_name = container_name
+        if not refresh_event:
+            refresh_event = []
+        elif not isinstance(refresh_event, list):
+            refresh_event = [refresh_event]
+        for ev in refresh_event:
+            self.framework.observe(ev, self._configure_requested_volumes)
+
+    def _configure_requested_volumes(self, _):
+        volumes_to_add = self.volumes_to_add_func()
+        volumes_to_delete = self.volumes_to_remove_func()
+        if volumes_to_delete:
+            self.remove_volumes(
+                requested_volumes=volumes_to_delete,
+            )
+        if volumes_to_add:
+            self.add_volumes(
+                requested_volumes=volumes_to_add,
+            )
 
     def add_volumes(
         self,
         requested_volumes: Iterable[RequestedVolume],
-        container_name: str,
     ) -> None:
         """Add requested volumes and patches statefulset.
 
         Args:
             requested_volumes: Iterable of volumes to add to the statefulset
-            container_name: Container name
         """
-        self.kubernetes.patch_volumes(
-            statefulset_name=self.application_name,
+        if not self.is_patched(
             requested_volumes=requested_volumes,
-            container_name=container_name,
-        )
+        ):
+            self.kubernetes.patch_volumes(
+                statefulset_name=self.model.app.name,
+                requested_volumes=requested_volumes,
+                container_name=self.container_name,
+            )
 
     def remove_volumes(
         self,
         requested_volumes: Iterable[RequestedVolume],
-        container_name: str,
     ) -> None:
         """Deletes volumes from statefulset and pod.
 
         Args:
             requested_volumes: Iterable of volumes to remove from the statefulset and pod
-            container_name: Container name
         """
-        self.kubernetes.remove_volumes(
-            statefulset_name=self.application_name,
+        if self.is_patched(
             requested_volumes=requested_volumes,
-            container_name=container_name,
-        )
+        ):
+            self.kubernetes.remove_volumes(
+                statefulset_name=self.model.app.name,
+                requested_volumes=requested_volumes,
+                container_name=self.container_name,
+            )
 
     def _pod_is_patched(self, requested_volumes: Iterable[RequestedVolume]) -> bool:
         """Returns whether pod is patched with requested volumes and resource limits.
@@ -432,7 +504,7 @@ class KubernetesVolumesPatchLib:
         Returns:
             str: A string containing the name of the current unit's pod.
         """
-        return "-".join(self.unit_name.rsplit("/", 1))
+        return "-".join(self.model.unit.name.rsplit("/", 1))
 
     def _statefulset_is_patched(self, requested_volumes: Iterable[RequestedVolume]) -> bool:
         """Returns whether statefulset is patched with requested volumes.
@@ -444,7 +516,7 @@ class KubernetesVolumesPatchLib:
             bool: Whether statefulset is patched
         """
         return self.kubernetes.statefulset_is_patched(
-            statefulset_name=self.application_name,
+            statefulset_name=self.model.app.name,
             requested_volumes=requested_volumes,
         )
 
