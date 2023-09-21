@@ -131,7 +131,10 @@ class KubernetesClient:
         requested_volumes: Iterable[RequestedVolume],
         container_name: str,
     ) -> bool:
-        """Returns whether pod has the requisite requested volumes and resources (when required).
+        """Returns whether pod has the requisite requested volumes and resources.
+
+        If requested volumes contain a HugePages volume, it shall have resources
+        limits and requests properly set.
 
         Args:
             pod_name: Pod name
@@ -369,12 +372,7 @@ class KubernetesClient:
             item for item in statefulset_volumes if item not in requested_volumes_volumes
         ]
         try:
-            self.client.replace(  # type: ignore[call-overload]
-                name=statefulset_name,
-                obj=statefulset,
-                namespace=self.namespace,
-                field_manager=self.__class__.__name__,
-            )
+            self.client.replace(obj=statefulset)
         except ApiError:
             raise KubernetesRequestedVolumesError(
                 f"Could not replace statefulset {statefulset_name}"
@@ -383,13 +381,13 @@ class KubernetesClient:
 
     @staticmethod
     def _hugepages_in_requested_volumes(requested_volumes: Iterable[RequestedVolume]) -> bool:
-        """Returns whether requested volumes contain an HugePages volume.
+        """Returns whether requested volumes contain a HugePages volume.
 
         Args:
             requested_volumes: Iterable of requested volumes
 
         Returns:
-            bool: Whether requested volumes contain an HugePages volume
+            bool: Whether requested volumes contain a HugePages volume
         """
         return any(
             [

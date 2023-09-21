@@ -78,7 +78,7 @@ class TestKubernetes(unittest.TestCase):
                 volume=Volume(
                     name="hugepage-1", emptyDir=EmptyDirVolumeSource(medium="HugePages")
                 ),
-                volume_mount=VolumeMount(name="hugepage-1", mountPath="/some/other/mountpoint"),
+                volume_mount=VolumeMount(name="hugepage-1", mountPath="/some/mountpoint"),
             )
         ]
         initial_statefulset = StatefulSet(
@@ -122,7 +122,7 @@ class TestKubernetes(unittest.TestCase):
                 volume=Volume(
                     name="hugepage-1", emptyDir=EmptyDirVolumeSource(medium="HugePages")
                 ),
-                volume_mount=VolumeMount(name="hugepage-1", mountPath="/some/other/mountpoint"),
+                volume_mount=VolumeMount(name="hugepage-1", mountPath="/some/mountpoint"),
             )
         ]
         patch_get.side_effect = ApiError(
@@ -147,7 +147,7 @@ class TestKubernetes(unittest.TestCase):
                 volume=Volume(
                     name="hugepage-1", emptyDir=EmptyDirVolumeSource(medium="HugePages")
                 ),
-                volume_mount=VolumeMount(name="hugepage-1", mountPath="/some/other/mountpoint"),
+                volume_mount=VolumeMount(name="hugepage-1", mountPath="/some/mountpoint"),
             )
         ]
         patch_get.return_value = StatefulSet(
@@ -224,7 +224,7 @@ class TestKubernetes(unittest.TestCase):
                 volume=Volume(
                     name="hugepage-1", emptyDir=EmptyDirVolumeSource(medium="HugePages")
                 ),
-                volume_mount=VolumeMount(name="hugepage-1", mountPath="/some/other/mountpoint"),
+                volume_mount=VolumeMount(name="hugepage-1", mountPath="/some/mountpoint"),
             )
         ]
         patch_get.return_value = StatefulSet(
@@ -262,7 +262,7 @@ class TestKubernetes(unittest.TestCase):
                 volume=Volume(
                     name="hugepage-1", emptyDir=EmptyDirVolumeSource(medium="HugePages")
                 ),
-                volume_mount=VolumeMount(name="hugepage-1", mountPath="/some/other/mountpoint"),
+                volume_mount=VolumeMount(name="hugepage-1", mountPath="/some/mountpoint"),
             )
         ]
         is_patched = self.kubernetes_volumes.pod_is_patched(
@@ -274,16 +274,16 @@ class TestKubernetes(unittest.TestCase):
         self.assertFalse(is_patched)
 
     @patch("lightkube.core.client.Client.get")
-    def test_given_requested_volume_not_set_when_pod_is_patched_then_returns_false(
+    def test_given_requested_volume_not_set_when_pod_is_patched_then_returns_false_hugepages(
         self, patch_get
-    ):  # noqa: E501
+    ):
         patch_get.return_value = Pod(
             spec=PodSpec(
                 containers=[
                     Container(
                         name="container-name",
                         volumeMounts=[],
-                        resources=ResourceRequirements(limits={}, requests={}),
+                        resources=ResourceRequirements(),
                     )
                 ],
                 volumes=[],
@@ -295,7 +295,7 @@ class TestKubernetes(unittest.TestCase):
                 volume=Volume(
                     name="hugepage-1", emptyDir=EmptyDirVolumeSource(medium="HugePages")
                 ),
-                volume_mount=VolumeMount(name="hugepage-1", mountPath="/some/other/mountpoint"),
+                volume_mount=VolumeMount(name="hugepage-1", mountPath="/some/mountpoint"),
             )
         ]
 
@@ -308,13 +308,81 @@ class TestKubernetes(unittest.TestCase):
         self.assertFalse(is_patched)
 
     @patch("lightkube.core.client.Client.get")
-    def test_given_pod_is_patched_when_pod_is_patched_then_returns_true(self, patch_get):
+    def test_given_requested_volume_not_set_when_pod_is_patched_then_returns_false_generic(
+        self, patch_get
+    ):
+        patch_get.return_value = Pod(
+            spec=PodSpec(
+                containers=[
+                    Container(
+                        name="container-name",
+                        volumeMounts=[],
+                        resources=ResourceRequirements(),
+                    )
+                ],
+                volumes=[],
+            )
+        )
+
+        requested_volumes = [
+            RequestedVolume(
+                volume=Volume(name="volume-1", emptyDir=EmptyDirVolumeSource(medium="Memory")),
+                volume_mount=VolumeMount(name="volume-1", mountPath="/some/mountpoint"),
+            )
+        ]
+
+        is_patched = self.kubernetes_volumes.pod_is_patched(
+            pod_name="pod name",
+            requested_volumes=requested_volumes,
+            container_name="container-name",
+        )
+
+        self.assertFalse(is_patched)
+
+    @patch("lightkube.core.client.Client.get")
+    def test_given_requested_volume_not_fully_set_when_pod_is_patched_then_returns_false_hugepages(
+        self, patch_get
+    ):  # noqa: E501
         requested_volumes = [
             RequestedVolume(
                 volume=Volume(
                     name="hugepage-1", emptyDir=EmptyDirVolumeSource(medium="HugePages")
                 ),
-                volume_mount=VolumeMount(name="hugepage-1", mountPath="/some/other/mountpoint"),
+                volume_mount=VolumeMount(name="hugepage-1", mountPath="/some/mountpoint"),
+            )
+        ]
+        container_name = "whatever name"
+        patch_get.return_value = Pod(
+            spec=PodSpec(
+                containers=[
+                    Container(
+                        name=container_name,
+                        volumeMounts=[
+                            requested_volume.volume_mount for requested_volume in requested_volumes
+                        ],
+                        resources=ResourceRequirements(),
+                    ),
+                ],
+                volumes=[requested_volume.volume for requested_volume in requested_volumes],
+            ),
+        )
+
+        is_patched = self.kubernetes_volumes.pod_is_patched(
+            pod_name="pod name",
+            requested_volumes=requested_volumes,
+            container_name=container_name,
+        )
+
+        self.assertFalse(is_patched)
+
+    @patch("lightkube.core.client.Client.get")
+    def test_given_pod_is_patched_when_pod_is_patched_then_returns_true_hugepages(self, patch_get):
+        requested_volumes = [
+            RequestedVolume(
+                volume=Volume(
+                    name="hugepage-1", emptyDir=EmptyDirVolumeSource(medium="HugePages")
+                ),
+                volume_mount=VolumeMount(name="hugepage-1", mountPath="/some/mountpoint"),
             )
         ]
         container_name = "whatever name"
@@ -329,6 +397,38 @@ class TestKubernetes(unittest.TestCase):
                         resources=ResourceRequirements(
                             limits={"hugepages-1Gi": "2Gi"}, requests={"hugepages-1Gi": "2Gi"}
                         ),
+                    ),
+                ],
+                volumes=[requested_volume.volume for requested_volume in requested_volumes],
+            ),
+        )
+
+        is_patched = self.kubernetes_volumes.pod_is_patched(
+            pod_name="pod name",
+            requested_volumes=requested_volumes,
+            container_name=container_name,
+        )
+
+        self.assertTrue(is_patched)
+
+    @patch("lightkube.core.client.Client.get")
+    def test_given_pod_is_patched_when_pod_is_patched_then_returns_true_generic(self, patch_get):
+        requested_volumes = [
+            RequestedVolume(
+                volume=Volume(name="volume-1", emptyDir=EmptyDirVolumeSource(medium="Memory")),
+                volume_mount=VolumeMount(name="volume-1", mountPath="/some/mountpoint"),
+            )
+        ]
+        container_name = "whatever name"
+        patch_get.return_value = Pod(
+            spec=PodSpec(
+                containers=[
+                    Container(
+                        name=container_name,
+                        volumeMounts=[
+                            requested_volume.volume_mount for requested_volume in requested_volumes
+                        ],
+                        resources=ResourceRequirements(),
                     ),
                 ],
                 volumes=[requested_volume.volume for requested_volume in requested_volumes],
