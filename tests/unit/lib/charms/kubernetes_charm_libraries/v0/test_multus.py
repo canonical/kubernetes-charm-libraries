@@ -9,7 +9,6 @@ import httpx
 import pytest
 from charms.kubernetes_charm_libraries.v0.multus import (  # type: ignore[import]
     KubernetesClient,
-    KubernetesMultusCharmEvents,
     KubernetesMultusCharmLib,
     KubernetesMultusError,
     NetworkAnnotation,
@@ -28,7 +27,8 @@ from lightkube.models.meta_v1 import LabelSelector, ObjectMeta
 from lightkube.resources.apps_v1 import StatefulSet as StatefulSetResource
 from lightkube.resources.core_v1 import Pod
 from lightkube.types import PatchType
-from ops.charm import CharmBase
+from ops import EventBase, EventSource, Handle
+from ops.charm import CharmBase, CharmEvents
 from ops.testing import Harness
 
 MULTUS_LIBRARY_PATH = "charms.kubernetes_charm_libraries.v0.multus"
@@ -610,6 +610,19 @@ class TestKubernetes(unittest.TestCase):
         self.kubernetes_multus.delete_pod(pod_name)
 
         patch_delete.assert_called_with(Pod, pod_name, namespace=self.namespace)
+
+
+class NadConfigChangedEvent(EventBase):
+    """Event triggered when an existing network attachment definition is changed."""
+
+    def __init__(self, handle: Handle):
+        super().__init__(handle)
+
+
+class KubernetesMultusCharmEvents(CharmEvents):
+    """Kubernetes Multus Charm Events."""
+
+    nad_config_changed = EventSource(NadConfigChangedEvent)
 
 
 class _TestCharmNoNAD(CharmBase):

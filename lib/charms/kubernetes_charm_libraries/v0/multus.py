@@ -18,9 +18,19 @@
 from charms.kubernetes_charm_libraries.v0.multus import (
     KubernetesMultusCharmLib,
     NetworkAttachmentDefinition,
-    KubernetesMultusCharmEvents,
-    NetworkAnnotation,
+    NetworkAnnotation
 )
+
+class NadConfigChangedEvent(EventBase):
+
+    def __init__(self, handle: Handle):
+        super().__init__(handle)
+
+
+class KubernetesMultusCharmEvents(CharmEvents):
+
+    nad_config_changed = EventSource(NadConfigChangedEvent)
+
 
 class YourCharm(CharmBase):
 
@@ -104,8 +114,8 @@ from lightkube.models.meta_v1 import ObjectMeta
 from lightkube.resources.apps_v1 import StatefulSet
 from lightkube.resources.core_v1 import Pod
 from lightkube.types import PatchType
-from ops.charm import CharmBase, CharmEvents, RemoveEvent
-from ops.framework import BoundEvent, EventBase, EventSource, Handle, Object
+from ops.charm import CharmBase, RemoveEvent
+from ops.framework import BoundEvent, Object
 
 # The unique Charmhub library identifier, never change it
 LIBID = "75283550e3474e7b8b5b7724d345e3c2"
@@ -477,19 +487,6 @@ class KubernetesClient:
                 if privileged and not container.securityContext.privileged:
                     return False
         return True
-
-
-class NadConfigChangedEvent(EventBase):
-    """Event triggered when an existing network attachment definition is changed."""
-
-    def __init__(self, handle: Handle):
-        super().__init__(handle)
-
-
-class KubernetesMultusCharmEvents(CharmEvents):
-    """Kubernetes Multus Charm Events."""
-
-    nad_config_changed = EventSource(NadConfigChangedEvent)
 
 
 class KubernetesMultusCharmLib(Object):
