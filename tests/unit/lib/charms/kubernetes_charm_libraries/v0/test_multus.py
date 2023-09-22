@@ -9,9 +9,9 @@ import httpx
 import pytest
 from charms.kubernetes_charm_libraries.v0.multus import (  # type: ignore[import]
     KubernetesClient,
+    KubernetesMultusCharmEvents,
     KubernetesMultusCharmLib,
     KubernetesMultusError,
-    NadConfigChangedCharmEvents,
     NetworkAnnotation,
     NetworkAttachmentDefinition,
 )
@@ -613,7 +613,7 @@ class TestKubernetes(unittest.TestCase):
 
 
 class _TestCharmNoNAD(CharmBase):
-    on = NadConfigChangedCharmEvents()
+    on = KubernetesMultusCharmEvents()
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -631,7 +631,7 @@ class _TestCharmNoNAD(CharmBase):
 
 
 class _TestCharmMultipleNAD(CharmBase):
-    on = NadConfigChangedCharmEvents()
+    on = KubernetesMultusCharmEvents()
 
     def __init__(self, *args):
         super().__init__(*args)

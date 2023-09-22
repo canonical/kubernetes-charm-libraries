@@ -3,7 +3,8 @@
 
 """Charm Library used to leverage the Multus Kubernetes CNI in charms.
 
-- On a Bound event (e.g. NadConfigChangedEvent), it will:
+- On a BoundEvent (e.g. self.on.nad_config_changed which is originated from NadConfigChangedEvent),
+ it will:
   - Configure the requested network attachment definitions
   - Patch the statefulset with the necessary annotations for the container to have interfaces
     that use those new network attachments.
@@ -17,13 +18,13 @@
 from charms.kubernetes_charm_libraries.v0.multus import (
     KubernetesMultusCharmLib,
     NetworkAttachmentDefinition,
-    NadConfigChangedCharmEvents,
+    KubernetesMultusCharmEvents,
     NetworkAnnotation,
 )
 
 class YourCharm(CharmBase):
 
-    on = NadConfigChangedCharmEvents()
+    on = KubernetesMultusCharmEvents()
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -485,8 +486,8 @@ class NadConfigChangedEvent(EventBase):
         super().__init__(handle)
 
 
-class NadConfigChangedCharmEvents(CharmEvents):
-    """NAD config changed events."""
+class KubernetesMultusCharmEvents(CharmEvents):
+    """Kubernetes Multus Charm Events."""
 
     nad_config_changed = EventSource(NadConfigChangedEvent)
 
@@ -514,7 +515,7 @@ class KubernetesMultusCharmLib(Object):
             container_name: Container name
             cap_net_admin: Container requires NET_ADMIN capability
             privileged: Container requires privileged security context
-            refresh_event: A bound event which will be observed
+            refresh_event: A BoundEvent which will be observed
                 to configure_multus (e.g. NadConfigChangedEvent).
         """
         super().__init__(charm, "kubernetes-multus")
