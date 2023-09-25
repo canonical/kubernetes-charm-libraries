@@ -3,7 +3,8 @@
 
 """Charm Library used to leverage the Volumes Kubernetes in charms.
 
-- On config-changed, it will:
+- On bound event (e.g. self.on.volumes_config_changed which is originated
+from K8sVolumePatchChangedEvent), it will:
   - Patch the StatefulSet with the required volumes
   - Patch the Pod with the required volume mounts and resources limits when necessary
 
@@ -12,11 +13,23 @@
 ```python
 
 from charms.kubernetes_charm_libraries.v0.volumes import (
-    KubernetesMultusCharmLib,
+    KubernetesVolumesPatchCharmLib,
     RequestedVolume
 )
 
+
+class K8sVolumePatchChangedEvent(EventBase):
+    def __init__(self, handle: Handle):
+        super().__init__(handle)
+
+
+class K8sVolumePatchChangedCharmEvents(CharmEvents):
+    volumes_config_changed = EventSource(K8sVolumePatchChangedEvent)
+
+
 class YourCharm(CharmBase):
+
+    on = K8sVolumePatchChangedCharmEvents()
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -25,13 +38,14 @@ class YourCharm(CharmBase):
             container_name=self._container_name,
             volumes_to_add_func=self._volumes_to_add_func_from_config,
             volumes_to_remove_func=self._volumes_to_remove_func_from_config,
+            refresh_event=self.on.volumes_config_changed,
         )
 
     def _volumes_to_add_func_from_config(self) -> list[RequestedVolume]:
-        pass
+        return []
 
     def volumes_to_remove_func_from_config(self) -> list[RequestedVolume]:
-        pass
+        return []
 
 """
 import logging
@@ -52,8 +66,8 @@ from lightkube.models.core_v1 import (
 from lightkube.resources.apps_v1 import StatefulSet
 from lightkube.resources.core_v1 import Pod
 from lightkube.types import PatchType
-from ops.charm import CharmBase, CharmEvents
-from ops.framework import BoundEvent, EventBase, EventSource, Handle, Object
+from ops.charm import CharmBase
+from ops.framework import BoundEvent, Object
 
 logger = logging.getLogger(__name__)
 
@@ -79,19 +93,6 @@ class KubernetesRequestedVolumesError(Exception):
     def __init__(self, message: str):
         self.message = message
         super().__init__(self.message)
-
-
-class K8sVolumePatchChangedEvent(EventBase):
-    """Charm Event triggered when a K8S volume patch is changed."""
-
-    def __init__(self, handle: Handle):
-        super().__init__(handle)
-
-
-class K8sVolumePatchChangedCharmEvents(CharmEvents):
-    """K8S volumes config changed events."""
-
-    volumes_config_changed = EventSource(K8sVolumePatchChangedEvent)
 
 
 class ContainerNotFoundError(ValueError):

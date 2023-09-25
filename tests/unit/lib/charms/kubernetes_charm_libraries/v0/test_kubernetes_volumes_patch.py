@@ -6,7 +6,6 @@ from unittest.mock import Mock, patch
 
 import httpx
 from charms.kubernetes_charm_libraries.v0.kubernetes_volumes_patch import (  # type: ignore[import]
-    K8sVolumePatchChangedCharmEvents,
     KubernetesClient,
     KubernetesVolumesPatchCharmLib,
     RequestedVolume,
@@ -26,7 +25,8 @@ from lightkube.models.meta_v1 import LabelSelector
 from lightkube.resources.apps_v1 import StatefulSet as StatefulSetResource
 from lightkube.resources.core_v1 import Pod
 from lightkube.types import PatchType
-from ops.charm import CharmBase
+from ops import EventBase, EventSource, Handle
+from ops.charm import CharmBase, CharmEvents
 from ops.testing import Harness
 
 VOLUMES_LIBRARY_PATH = "charms.kubernetes_charm_libraries.v0.kubernetes_volumes_patch"
@@ -442,6 +442,19 @@ class TestKubernetes(unittest.TestCase):
         )
 
         self.assertTrue(is_patched)
+
+
+class K8sVolumePatchChangedEvent(EventBase):
+    """Charm Event triggered when a K8S volume patch is changed."""
+
+    def __init__(self, handle: Handle):
+        super().__init__(handle)
+
+
+class K8sVolumePatchChangedCharmEvents(CharmEvents):
+    """K8S volumes config changed events."""
+
+    volumes_config_changed = EventSource(K8sVolumePatchChangedEvent)
 
 
 class _TestCharmNoVolumes(CharmBase):
