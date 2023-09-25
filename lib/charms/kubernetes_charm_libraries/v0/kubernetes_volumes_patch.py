@@ -36,7 +36,7 @@ class YourCharm(CharmBase):
 """
 import logging
 from dataclasses import dataclass
-from typing import Callable, Iterable, List, Optional, Union
+from typing import Callable, Iterable
 
 from lightkube import Client
 from lightkube.core.exceptions import ApiError
@@ -406,7 +406,7 @@ class KubernetesVolumesPatchCharmLib(Object):
         volumes_to_add_func: Callable[[], Iterable[RequestedVolume]],
         volumes_to_remove_func: Callable[[], Iterable[RequestedVolume]],
         container_name: str,
-        refresh_event: Optional[Union[BoundEvent, List[BoundEvent]]] = None,
+        refresh_event: BoundEvent,
     ):
         """Constructor for the KubernetesVolumesPatchLib.
 
@@ -417,20 +417,14 @@ class KubernetesVolumesPatchCharmLib(Object):
             volumes_to_remove_func: A callable to a function returning a list of
               `RequestedVolume` to be deleted.
             container_name: Container name
-            refresh_event: an optional bound event or list of bound events which
-                will be observed to re-apply the patch.
+            refresh_event: a bound event which will be observed to re-apply the patch.
         """
         super().__init__(charm, "kubernetes-requested-volumes")
         self.kubernetes = KubernetesClient(namespace=self.model.name)
         self.volumes_to_add_func = volumes_to_add_func
         self.volumes_to_remove_func = volumes_to_remove_func
         self.container_name = container_name
-        if not refresh_event:
-            refresh_event = []
-        elif not isinstance(refresh_event, list):
-            refresh_event = [refresh_event]
-        for ev in refresh_event:
-            self.framework.observe(ev, self._configure_requested_volumes)
+        self.framework.observe(refresh_event, self._configure_requested_volumes)
 
     def _configure_requested_volumes(self, _):
         volumes_to_add = self.volumes_to_add_func()
