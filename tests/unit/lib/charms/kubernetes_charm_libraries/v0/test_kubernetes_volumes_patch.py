@@ -31,6 +31,9 @@ from ops.testing import Harness
 
 VOLUMES_LIBRARY_PATH = "charms.kubernetes_charm_libraries.v0.kubernetes_volumes_patch"
 
+CONTAINER_NAME = "whatever container name"
+STATEFULSET_NAME = "whatever statefulset name"
+
 
 class TestKubernetes(unittest.TestCase):
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
@@ -71,8 +74,6 @@ class TestKubernetes(unittest.TestCase):
     def test_given_statefulset_doesnt_have_requested_volumes_when_patch_statefulset_then_statefulset_is_patched(  # noqa: E501
         self, patch_get, patch_patch
     ):
-        container_name = "whatever container name"
-        statefulset_name = "whatever statefulset name"
         requested_volumes = [
             RequestedVolume(
                 volume=Volume(
@@ -89,7 +90,7 @@ class TestKubernetes(unittest.TestCase):
                     spec=PodSpec(
                         containers=[
                             Container(
-                                name=container_name,
+                                name=CONTAINER_NAME,
                                 volumeMounts=[],
                             )
                         ],
@@ -101,14 +102,14 @@ class TestKubernetes(unittest.TestCase):
         patch_get.return_value = initial_statefulset
 
         self.kubernetes_volumes.patch_volumes(
-            statefulset_name="whatever statefulset name",
+            statefulset_name=STATEFULSET_NAME,
             requested_volumes=requested_volumes,
-            container_name=container_name,
+            container_name=CONTAINER_NAME,
         )
 
         args, kwargs = patch_patch.call_args
         self.assertEqual(kwargs["res"], StatefulSetResource)
-        self.assertEqual(kwargs["name"], statefulset_name)
+        self.assertEqual(kwargs["name"], STATEFULSET_NAME)
         self.assertEqual(kwargs["patch_type"], PatchType.APPLY)
         self.assertEqual(kwargs["namespace"], self.namespace)
 
@@ -116,7 +117,6 @@ class TestKubernetes(unittest.TestCase):
     def test_given_k8s_get_throws_unauthorized_api_error_when_statefulset_is_patched_then_returns_false(  # noqa: E501
         self, patch_get
     ):
-        statefulset_name = "whatever name"
         requested_volumes = [
             RequestedVolume(
                 volume=Volume(
@@ -131,7 +131,7 @@ class TestKubernetes(unittest.TestCase):
         )
 
         statefulset_is_patched = self.kubernetes_volumes.statefulset_is_patched(
-            statefulset_name=statefulset_name,
+            statefulset_name=STATEFULSET_NAME,
             requested_volumes=requested_volumes,
         )
 
@@ -141,7 +141,6 @@ class TestKubernetes(unittest.TestCase):
     def test_given_no_requested_volumes_when_statefulset_is_patched_then_returns_false(
         self, patch_get
     ):
-        statefulset_name = "whatever name"
         requested_volumes = [
             RequestedVolume(
                 volume=Volume(
@@ -164,7 +163,7 @@ class TestKubernetes(unittest.TestCase):
         )
 
         statefulset_is_patched = self.kubernetes_volumes.statefulset_is_patched(
-            statefulset_name=statefulset_name,
+            statefulset_name=STATEFULSET_NAME,
             requested_volumes=requested_volumes,
         )
 
@@ -174,7 +173,6 @@ class TestKubernetes(unittest.TestCase):
     def test_given_requested_volumes_are_different_when_statefulset_is_patched_then_returns_false(
         self, patch_get
     ):
-        statefulset_name = "whatever name"
         requested_volumes_in_statefulset = [
             RequestedVolume(
                 volume=Volume(
@@ -208,7 +206,7 @@ class TestKubernetes(unittest.TestCase):
         )
 
         statefulset_is_patched = self.kubernetes_volumes.statefulset_is_patched(
-            statefulset_name=statefulset_name,
+            statefulset_name=STATEFULSET_NAME,
             requested_volumes=requested_volumes,
         )
 
@@ -218,7 +216,6 @@ class TestKubernetes(unittest.TestCase):
     def test_given_requested_volumes_are_already_present_when_statefulset_is_patched_then_returns_true(  # noqa: E501
         self, patch_get
     ):
-        statefulset_name = "whatever name"
         requested_volumes = [
             RequestedVolume(
                 volume=Volume(
@@ -243,7 +240,7 @@ class TestKubernetes(unittest.TestCase):
         )
 
         statefulset_is_patched = self.kubernetes_volumes.statefulset_is_patched(
-            statefulset_name=statefulset_name,
+            statefulset_name=STATEFULSET_NAME,
             requested_volumes=requested_volumes,
         )
 
@@ -281,7 +278,7 @@ class TestKubernetes(unittest.TestCase):
             spec=PodSpec(
                 containers=[
                     Container(
-                        name="container-name",
+                        name=CONTAINER_NAME,
                         volumeMounts=[],
                         resources=ResourceRequirements(),
                     )
@@ -302,7 +299,7 @@ class TestKubernetes(unittest.TestCase):
         is_patched = self.kubernetes_volumes.pod_is_patched(
             pod_name="pod name",
             requested_volumes=requested_volumes,
-            container_name="container-name",
+            container_name=CONTAINER_NAME,
         )
 
         self.assertFalse(is_patched)
@@ -315,7 +312,7 @@ class TestKubernetes(unittest.TestCase):
             spec=PodSpec(
                 containers=[
                     Container(
-                        name="container-name",
+                        name=CONTAINER_NAME,
                         volumeMounts=[],
                         resources=ResourceRequirements(),
                     )
@@ -334,7 +331,7 @@ class TestKubernetes(unittest.TestCase):
         is_patched = self.kubernetes_volumes.pod_is_patched(
             pod_name="pod name",
             requested_volumes=requested_volumes,
-            container_name="container-name",
+            container_name=CONTAINER_NAME,
         )
 
         self.assertFalse(is_patched)
@@ -351,12 +348,11 @@ class TestKubernetes(unittest.TestCase):
                 volume_mount=VolumeMount(name="hugepage-1", mountPath="/some/mountpoint"),
             )
         ]
-        container_name = "whatever name"
         patch_get.return_value = Pod(
             spec=PodSpec(
                 containers=[
                     Container(
-                        name=container_name,
+                        name=CONTAINER_NAME,
                         volumeMounts=[
                             requested_volume.volume_mount for requested_volume in requested_volumes
                         ],
@@ -370,7 +366,7 @@ class TestKubernetes(unittest.TestCase):
         is_patched = self.kubernetes_volumes.pod_is_patched(
             pod_name="pod name",
             requested_volumes=requested_volumes,
-            container_name=container_name,
+            container_name=CONTAINER_NAME,
         )
 
         self.assertFalse(is_patched)
@@ -385,12 +381,11 @@ class TestKubernetes(unittest.TestCase):
                 volume_mount=VolumeMount(name="hugepage-1", mountPath="/some/mountpoint"),
             )
         ]
-        container_name = "whatever name"
         patch_get.return_value = Pod(
             spec=PodSpec(
                 containers=[
                     Container(
-                        name=container_name,
+                        name=CONTAINER_NAME,
                         volumeMounts=[
                             requested_volume.volume_mount for requested_volume in requested_volumes
                         ],
@@ -406,7 +401,7 @@ class TestKubernetes(unittest.TestCase):
         is_patched = self.kubernetes_volumes.pod_is_patched(
             pod_name="pod name",
             requested_volumes=requested_volumes,
-            container_name=container_name,
+            container_name=CONTAINER_NAME,
         )
 
         self.assertTrue(is_patched)
@@ -419,12 +414,11 @@ class TestKubernetes(unittest.TestCase):
                 volume_mount=VolumeMount(name="volume-1", mountPath="/some/mountpoint"),
             )
         ]
-        container_name = "whatever name"
         patch_get.return_value = Pod(
             spec=PodSpec(
                 containers=[
                     Container(
-                        name=container_name,
+                        name=CONTAINER_NAME,
                         volumeMounts=[
                             requested_volume.volume_mount for requested_volume in requested_volumes
                         ],
@@ -438,7 +432,7 @@ class TestKubernetes(unittest.TestCase):
         is_patched = self.kubernetes_volumes.pod_is_patched(
             pod_name="pod name",
             requested_volumes=requested_volumes,
-            container_name=container_name,
+            container_name=CONTAINER_NAME,
         )
 
         self.assertTrue(is_patched)
