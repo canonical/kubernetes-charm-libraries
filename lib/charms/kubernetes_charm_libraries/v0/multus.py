@@ -24,9 +24,6 @@ from charms.kubernetes_charm_libraries.v0.multus import (
 
 class NadConfigChangedEvent(EventBase):
 
-    def __init__(self, handle: Handle):
-        super().__init__(handle)
-
 
 class KubernetesMultusCharmEvents(CharmEvents):
 
