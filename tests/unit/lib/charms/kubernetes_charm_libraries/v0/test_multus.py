@@ -918,6 +918,122 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
         patch_delete_nad.assert_not_called()
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_pod")
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition", new=Mock
+    )
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_network_attachment_definition", new=Mock
+    )
+    def test_given_nads_exist_but_they_are_different_when_nad_config_changed_then_pod_delete_is_called_once(  # noqa: E501
+        self, patch_list_nads, patch_delete_pod
+    ):
+        harness = Harness(_TestCharmMultipleNAD)
+        self.addCleanup(harness.cleanup)
+        harness.begin()
+        patch_list_nads.return_value = [
+            NetworkAttachmentDefinition(
+                metadata=ObjectMeta(
+                    name=harness.charm.nad_1_name,
+                    labels={"app.juju.is/created-by": harness.charm.app.name},
+                ),
+                spec={"different": "spec"},
+            ),
+            NetworkAttachmentDefinition(
+                metadata=ObjectMeta(
+                    name=harness.charm.nad_2_name,
+                    labels={"app.juju.is/created-by": harness.charm.app.name},
+                ),
+                spec={"different": "spec"},
+            ),
+        ]
+        harness.charm.on.nad_config_changed.emit()
+        patch_delete_pod.assert_called_once()
+
+    @patch("lightkube.core.client.GenericSyncClient", new=Mock)
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_pod")
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition", new=Mock
+    )
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_network_attachment_definition", new=Mock
+    )
+    def test_given_nads_exist_but_they_are_different_when_config_changed_then_pod_delete_is_not_called(  # noqa: E501
+        self, patch_list_nads, patch_delete_pod
+    ):
+        harness = Harness(_TestCharmMultipleNAD)
+        self.addCleanup(harness.cleanup)
+        harness.begin()
+        patch_list_nads.return_value = [
+            NetworkAttachmentDefinition(
+                metadata=ObjectMeta(
+                    name=harness.charm.nad_1_name,
+                    labels={"app.juju.is/created-by": harness.charm.app.name},
+                ),
+                spec={"different": "spec"},
+            ),
+            NetworkAttachmentDefinition(
+                metadata=ObjectMeta(
+                    name=harness.charm.nad_2_name,
+                    labels={"app.juju.is/created-by": harness.charm.app.name},
+                ),
+                spec={"different": "spec"},
+            ),
+        ]
+        harness.charm.on.config_changed.emit()
+        patch_delete_pod.assert_not_called()
+
+    @patch("lightkube.core.client.GenericSyncClient", new=Mock)
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_pod")
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition", new=Mock
+    )
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_network_attachment_definition", new=Mock
+    )
+    def test_given_nads_exist_but_are_same_when_nad_config_changed_then_pod_delete_is_not_called(
+        self, patch_list_nads, patch_delete_pod
+    ):
+        harness = Harness(_TestCharmMultipleNAD)
+        self.addCleanup(harness.cleanup)
+        harness.begin()
+        patch_list_nads.return_value = [
+            NetworkAttachmentDefinition(
+                metadata=ObjectMeta(name="nad-1"),
+                spec={
+                    "config": {
+                        "cniVersion": "1.2.3",
+                        "type": "macvlan",
+                        "ipam": {"type": "static"},
+                        "capabilities": {"mac": True},
+                    }
+                },
+            ),
+            NetworkAttachmentDefinition(
+                metadata=ObjectMeta(name="nad-2"),
+                spec={
+                    "config": {
+                        "cniVersion": "4.5.6",
+                        "type": "pizza",
+                        "ipam": {"type": "whatever"},
+                        "capabilities": {"mac": True},
+                    }
+                },
+            ),
+        ]
+        harness.charm.on.nad_config_changed.emit()
+        patch_delete_pod.assert_not_called()
+
+    @patch("lightkube.core.client.GenericSyncClient", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
@@ -1101,28 +1217,3 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
         harness.begin()
         harness.charm.kubernetes_multus.delete_pod()
         patch_delete.assert_called_once()
-
-    @patch("lightkube.core.client.GenericSyncClient", new=Mock)
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
-    def test_given_k8s_returns_list_when_get_network_attachment_definitions_then_same_list_is_returned(  # noqa: E501
-        self, patch_list
-    ):
-        harness = Harness(_TestCharmNoNAD)
-        self.addCleanup(harness.cleanup)
-        harness.begin()
-        nad_list_return = ["whatever", "list", "content"]
-        patch_list.return_value = nad_list_return
-        expected_nad_list = harness.charm.kubernetes_multus.get_network_attachment_definitions()
-        self.assertListEqual(nad_list_return, expected_nad_list)
-        patch_list.assert_called_once()
-
-    @patch("lightkube.core.client.GenericSyncClient", new=Mock)
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
-    def test_given_k8s_returns_list_when_get_network_attachment_definitions_then_list_network_attachment_definitions_is_called(  # noqa: E501
-        self, patch_list
-    ):
-        harness = Harness(_TestCharmNoNAD)
-        self.addCleanup(harness.cleanup)
-        harness.begin()
-        harness.charm.kubernetes_multus.get_network_attachment_definitions()
-        patch_list.assert_called_once()
