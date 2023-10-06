@@ -4,12 +4,12 @@ import unittest
 from unittest.mock import Mock, patch
 
 import httpx
-from charms.kubernetes_charm_libraries.v0.kubernetes_volumes_patch import (  # type: ignore[import]
+from charms.kubernetes_charm_libraries.v0.kubernetes_hugepages_volumes_patch import (  # type: ignore[import]  # noqa E501
     ContainerNotFoundError,
     KubernetesClient,
-    KubernetesHugepagesPatchCharmLib,
-    KubernetesRequestedVolumesError,
-    RequestedHugepages,
+    KubernetesHugePagesPatchCharmLib,
+    KubernetesHugePagesVolumesPatchError,
+    RequestedHugePages,
 )
 from lightkube.core.exceptions import ApiError
 from lightkube.models.apps_v1 import StatefulSet, StatefulSetSpec
@@ -24,11 +24,11 @@ from lightkube.models.core_v1 import (
 )
 from lightkube.models.meta_v1 import LabelSelector
 from lightkube.resources.core_v1 import Pod
-from ops import EventBase, EventSource, Handle
+from ops import EventBase, EventSource
 from ops.charm import CharmBase, CharmEvents
 from ops.testing import Harness
 
-VOLUMES_LIBRARY_PATH = "charms.kubernetes_charm_libraries.v0.kubernetes_volumes_patch"
+VOLUMES_LIBRARY_PATH = "charms.kubernetes_charm_libraries.v0.kubernetes_hugepages_volumes_patch"
 
 CONTAINER_NAME = "whatever container name"
 STATEFULSET_NAME = "whatever statefulset name"
@@ -136,7 +136,7 @@ class TestKubernetes(unittest.TestCase):
             request=httpx.Request(method="GET", url="http://whatever.com"),
             response=httpx.Response(status_code=500, json={"reason": "Internal Server Error"}),
         )
-        with self.assertRaises(KubernetesRequestedVolumesError):
+        with self.assertRaises(KubernetesHugePagesVolumesPatchError):
             self.kubernetes_volumes.replace_statefulset(
                 statefulset_name=STATEFULSET_NAME,
                 requested_volumes=requested_volumes,
@@ -177,7 +177,7 @@ class TestKubernetes(unittest.TestCase):
             request=httpx.Request(method="GET", url="http://whatever.com"),
             response=httpx.Response(status_code=500, json={"reason": "Internal Server Error"}),
         )
-        with self.assertRaises(KubernetesRequestedVolumesError):
+        with self.assertRaises(KubernetesHugePagesVolumesPatchError):
             self.kubernetes_volumes.replace_statefulset(
                 statefulset_name=STATEFULSET_NAME,
                 requested_volumes=requested_volumes,
@@ -197,7 +197,7 @@ class TestKubernetes(unittest.TestCase):
             request=httpx.Request(method="GET", url="http://whatever.com"),
             response=httpx.Response(status_code=500, json={"reason": "Internal Server Error"}),
         )
-        with self.assertRaises(KubernetesRequestedVolumesError):
+        with self.assertRaises(KubernetesHugePagesVolumesPatchError):
             self.kubernetes_volumes.statefulset_is_patched(
                 statefulset_name=STATEFULSET_NAME,
                 requested_volumes=requested_volumes,
@@ -320,7 +320,7 @@ class TestKubernetes(unittest.TestCase):
                 mountPath="/some/mountpath",
             )
         ]
-        with self.assertRaises(KubernetesRequestedVolumesError):
+        with self.assertRaises(KubernetesHugePagesVolumesPatchError):
             self.kubernetes_volumes.pod_is_patched(
                 pod_name="pod name",
                 requested_volumemounts=requested_volumemounts,
@@ -517,7 +517,7 @@ class TestKubernetes(unittest.TestCase):
             request=httpx.Request(method="GET", url="http://whatever.com"),
             response=httpx.Response(status_code=500, json={"reason": "Internal Server Error"}),
         )
-        with self.assertRaises(KubernetesRequestedVolumesError):
+        with self.assertRaises(KubernetesHugePagesVolumesPatchError):
             self.kubernetes_volumes.list_volumes(
                 statefulset_name=STATEFULSET_NAME,
             )
@@ -562,7 +562,7 @@ class TestKubernetes(unittest.TestCase):
             request=httpx.Request(method="GET", url="http://whatever.com"),
             response=httpx.Response(status_code=500, json={"reason": "Internal Server Error"}),
         )
-        with self.assertRaises(KubernetesRequestedVolumesError):
+        with self.assertRaises(KubernetesHugePagesVolumesPatchError):
             self.kubernetes_volumes.list_volumemounts(
                 statefulset_name=STATEFULSET_NAME,
                 container_name=CONTAINER_NAME,
@@ -603,59 +603,56 @@ class TestKubernetes(unittest.TestCase):
             request=httpx.Request(method="GET", url="http://whatever.com"),
             response=httpx.Response(status_code=500, json={"reason": "Internal Server Error"}),
         )
-        with self.assertRaises(KubernetesRequestedVolumesError):
+        with self.assertRaises(KubernetesHugePagesVolumesPatchError):
             self.kubernetes_volumes.list_container_resources(
                 statefulset_name=STATEFULSET_NAME,
                 container_name=CONTAINER_NAME,
             )
 
 
-class K8sHugepagesVolumeChangedEvent(EventBase):
+class K8sHugePagesVolumePatchChangedEvent(EventBase):
     """Charm Event triggered when a K8S HugePages volume is changed."""
 
-    def __init__(self, handle: Handle):
-        super().__init__(handle)
 
-
-class K8sHugepagesVolumeChangedCharmEvents(CharmEvents):
+class K8sHugePagesVolumePatchChangedCharmEvents(CharmEvents):
     """K8S hugepages config changed events."""
 
-    hugepages_config_changed = EventSource(K8sHugepagesVolumeChangedEvent)
+    hugepages_volumes_config_changed = EventSource(K8sHugePagesVolumePatchChangedEvent)
 
 
 class _TestCharmNoVolumes(CharmBase):
-    on = K8sHugepagesVolumeChangedCharmEvents()
+    on = K8sHugePagesVolumePatchChangedCharmEvents()
 
     def __init__(self, *args):
         super().__init__(*args)
-        self.kubernetes_volumes = KubernetesHugepagesPatchCharmLib(
+        self.kubernetes_volumes = KubernetesHugePagesPatchCharmLib(
             charm=self,
             hugepages_volumes_func=self._volumes_func,
             container_name=CONTAINER_NAME,
-            refresh_event=self.on.hugepages_config_changed,
+            refresh_event=self.on.hugepages_volumes_config_changed,
         )
 
     @staticmethod
-    def _volumes_func() -> list[RequestedHugepages]:
+    def _volumes_func() -> list[RequestedHugePages]:
         return []
 
 
 class _TestCharmAddVolumes(CharmBase):
-    on = K8sHugepagesVolumeChangedCharmEvents()
+    on = K8sHugePagesVolumePatchChangedCharmEvents()
 
     def __init__(self, *args):
         super().__init__(*args)
-        self.kubernetes_volumes = KubernetesHugepagesPatchCharmLib(
+        self.kubernetes_volumes = KubernetesHugePagesPatchCharmLib(
             charm=self,
             hugepages_volumes_func=self._volumes_func,
             container_name=CONTAINER_NAME,
-            refresh_event=self.on.hugepages_config_changed,
+            refresh_event=self.on.hugepages_volumes_config_changed,
         )
 
     @staticmethod
-    def _volumes_func() -> list[RequestedHugepages]:
+    def _volumes_func() -> list[RequestedHugePages]:
         return [
-            RequestedHugepages(
+            RequestedHugePages(
                 mount_path="/dev/hugepages",
                 size="1Gi",
                 limit="4Gi",
@@ -663,7 +660,7 @@ class _TestCharmAddVolumes(CharmBase):
         ]
 
 
-class TestKubernetesHugepagesPatchCharmLib(unittest.TestCase):
+class TestKubernetesHugePagesPatchCharmLib(unittest.TestCase):
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
     @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.pod_is_patched")
     @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched")
@@ -680,7 +677,7 @@ class TestKubernetesHugepagesPatchCharmLib(unittest.TestCase):
         self.addCleanup(harness.cleanup)
         harness.begin()
 
-        harness.charm.on.hugepages_config_changed.emit()
+        harness.charm.on.hugepages_volumes_config_changed.emit()
 
         patch_replace_statefulset.assert_not_called()
 
@@ -734,7 +731,7 @@ class TestKubernetesHugepagesPatchCharmLib(unittest.TestCase):
         self.addCleanup(harness.cleanup)
         harness.begin()
 
-        harness.charm.on.hugepages_config_changed.emit()
+        harness.charm.on.hugepages_volumes_config_changed.emit()
 
         patch_replace_statefulset.assert_called_with(
             statefulset_name=harness.charm.app.name,
@@ -802,7 +799,7 @@ class TestKubernetesHugepagesPatchCharmLib(unittest.TestCase):
         self.addCleanup(harness.cleanup)
         harness.begin()
 
-        harness.charm.on.hugepages_config_changed.emit()
+        harness.charm.on.hugepages_volumes_config_changed.emit()
 
         patch_replace_statefulset.assert_called_with(
             statefulset_name=harness.charm.app.name,
@@ -883,7 +880,7 @@ class TestKubernetesHugepagesPatchCharmLib(unittest.TestCase):
         self.addCleanup(harness.cleanup)
         harness.begin()
 
-        harness.charm.on.hugepages_config_changed.emit()
+        harness.charm.on.hugepages_volumes_config_changed.emit()
 
         patch_replace_statefulset.assert_called_with(
             statefulset_name=harness.charm.app.name,
@@ -893,7 +890,7 @@ class TestKubernetesHugepagesPatchCharmLib(unittest.TestCase):
             requested_resources=expected_resources,
         )
 
-    def test_given_hugepages_when_generate_resources_then_resources_are_correctly_generated(self):
+    def test_given_hugepages_when_generate_resources_then_hugepages_resources_are_correctly_generated(self):
         harness = Harness(_TestCharmAddVolumes)
         self.addCleanup(harness.cleanup)
         harness.begin()
@@ -911,7 +908,7 @@ class TestKubernetesHugepagesPatchCharmLib(unittest.TestCase):
             ),
         )
 
-    def test_given_hugepages_when_generate_volumes_then_volumes_are_correctly_generated(self):
+    def test_given_hugepages_when_generate_volumes_then_hugepages_volumes_are_correctly_generated(self):
         harness = Harness(_TestCharmAddVolumes)
         self.addCleanup(harness.cleanup)
         harness.begin()
