@@ -890,7 +890,9 @@ class TestKubernetesHugePagesPatchCharmLib(unittest.TestCase):
             requested_resources=expected_resources,
         )
 
-    def test_given_hugepages_when_generate_resources_then_hugepages_resources_are_correctly_generated(self):
+    def test_given_hugepages_when_generate_resources_then_hugepages_resources_are_correctly_generated(  # noqa: E501
+        self,
+    ):
         harness = Harness(_TestCharmAddVolumes)
         self.addCleanup(harness.cleanup)
         harness.begin()
@@ -908,7 +910,9 @@ class TestKubernetesHugePagesPatchCharmLib(unittest.TestCase):
             ),
         )
 
-    def test_given_hugepages_when_generate_volumes_then_hugepages_volumes_are_correctly_generated(self):
+    def test_given_hugepages_when_generate_volumes_then_hugepages_volumes_are_correctly_generated(
+        self,
+    ):
         harness = Harness(_TestCharmAddVolumes)
         self.addCleanup(harness.cleanup)
         harness.begin()

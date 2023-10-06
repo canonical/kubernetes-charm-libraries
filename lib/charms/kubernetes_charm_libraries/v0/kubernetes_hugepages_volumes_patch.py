@@ -576,6 +576,21 @@ class KubernetesHugePagesPatchCharmLib(Object):
                 new_volumemounts.append(current_volumemount)
         return new_volumemounts
 
+    def _remove_hugepages_from_resource_requirements(self, attribute: dict) -> dict:
+        """Removes HugePages-related keys from the given dictionary.
+
+        Args:
+            attribute: dictionary (limits or requests)
+
+        Returns:
+            dict:
+        """
+        return {
+            key: value
+            for key, value in attribute.items()
+            if not self._limit_or_resource_is_hugepages(key)
+        }
+
     def _generate_resource_requirements_to_be_replaced(self) -> ResourceRequirements:
         """Generate the new resource requirements to be replaced in the container.
 
@@ -583,6 +598,7 @@ class KubernetesHugePagesPatchCharmLib(Object):
         2. Goes through the current resource requirements for the specified container
         - If a current limit (or request) is HugePages, discard it.
         - Else keep it.
+        3. Merge old resource requirements (without HugePages) and new HugePages requirements.
 
         Returns:
             ResourceRequirements: new resource requirements to be replaced in the container.
@@ -592,42 +608,19 @@ class KubernetesHugePagesPatchCharmLib(Object):
             statefulset_name=self.model.app.name, container_name=self.container_name
         )
 
+        new_limits = (
+            self._remove_hugepages_from_resource_requirements(current_resources.limits)
+            if current_resources.limits
+            else {}
+        )
+        new_requests = (
+            self._remove_hugepages_from_resource_requirements(current_resources.requests)
+            if current_resources.requests
+            else {}
+        )
         if self.hugepages_volumes_func():
-            if current_resources.limits:
-                new_limits = {
-                    limit: value
-                    for limit, value in current_resources.limits.items()
-                    if not self._limit_or_resource_is_hugepages(limit)
-                }
-                new_limits = dict(new_limits.items() | additional_resources.limits.items())
-            else:
-                new_limits = additional_resources.limits
-            if current_resources.requests:
-                new_requests = {
-                    request: value
-                    for request, value in current_resources.requests.items()
-                    if not self._limit_or_resource_is_hugepages(request)
-                }
-                new_requests = dict(new_requests.items() | additional_resources.requests.items())
-            else:
-                new_requests = additional_resources.requests
-        else:
-            if current_resources.limits:
-                new_limits = {
-                    limit: value
-                    for limit, value in current_resources.limits.items()
-                    if not self._limit_or_resource_is_hugepages(limit)
-                }
-            else:
-                new_limits = current_resources.limits
-            if current_resources.requests:
-                new_requests = {
-                    request: value
-                    for request, value in current_resources.requests.items()
-                    if not self._limit_or_resource_is_hugepages(request)
-                }
-            else:
-                new_requests = current_resources.requests
+            new_limits = dict(new_limits.items() | additional_resources.limits.items())
+            new_requests = dict(new_requests.items() | additional_resources.requests.items())
         new_resources = ResourceRequirements(
             limits=new_limits, requests=new_requests, claims=current_resources.claims
         )
