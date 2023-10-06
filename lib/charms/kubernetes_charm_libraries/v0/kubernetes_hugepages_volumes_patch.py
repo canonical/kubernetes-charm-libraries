@@ -576,18 +576,18 @@ class KubernetesHugePagesPatchCharmLib(Object):
                 new_volumemounts.append(current_volumemount)
         return new_volumemounts
 
-    def _remove_hugepages_from_resource_requirements(self, attribute: dict) -> dict:
+    def _remove_hugepages_from_resource_requirements(self, resource_attribute: dict) -> dict:
         """Removes HugePages-related keys from the given dictionary.
 
         Args:
-            attribute: dictionary (limits or requests)
+            resource_attribute: dictionary of resource requirements attribute (limits or requests)
 
         Returns:
-            dict:
+            dict: the input dictionary without HugePages-related keys.
         """
         return {
             key: value
-            for key, value in attribute.items()
+            for key, value in resource_attribute.items()
             if not self._limit_or_resource_is_hugepages(key)
         }
 
@@ -618,9 +618,8 @@ class KubernetesHugePagesPatchCharmLib(Object):
             if current_resources.requests
             else {}
         )
-        if self.hugepages_volumes_func():
-            new_limits = dict(new_limits.items() | additional_resources.limits.items())
-            new_requests = dict(new_requests.items() | additional_resources.requests.items())
+        new_limits = dict(new_limits.items() | additional_resources.limits.items())
+        new_requests = dict(new_requests.items() | additional_resources.requests.items())
         new_resources = ResourceRequirements(
             limits=new_limits, requests=new_requests, claims=current_resources.claims
         )
