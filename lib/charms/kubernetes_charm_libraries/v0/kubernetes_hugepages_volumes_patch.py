@@ -20,8 +20,6 @@ from charms.kubernetes_charm_libraries.v0.kubernetes_hugepages_volumes_patch imp
 
 
 class K8sHugePagesVolumePatchChangedEvent(EventBase):
-    def __init__(self, handle: Handle):
-        super().__init__(handle)
 
 
 class K8sHugePagesVolumePatchChangedCharmEvents(CharmEvents):
@@ -37,11 +35,11 @@ class YourCharm(CharmBase):
         self._kubernetes_volumes_patch = KubernetesHugePagesPatchCharmLib(
             charm=self,
             container_name=self._container_name,
-            volumes_request_func=self._volumes_request_func_from_config,
+            hugepages_volumes_func=self._hugepages_volumes_func_from_config,
             refresh_event=self.on.hugepages_volumes_config_changed,
         )
 
-    def _volumes_request_func_from_config(self) -> list[RequestedHugePages]:
+    def _hugepages_volumes_func_from_config(self) -> list[RequestedHugePages]:
         return [
             RequestedHugePages(
                 mount_path="/dev/hugepages",
