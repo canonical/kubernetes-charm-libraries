@@ -681,6 +681,7 @@ class TestKubernetesHugePagesPatchCharmLib(unittest.TestCase):
 
         patch_replace_statefulset.assert_not_called()
 
+    @patch("lightkube.core.client.GenericSyncClient", new=Mock)
     @patch("lightkube.core.client.Client.get")
     @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.pod_is_patched")
     @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched")
@@ -741,6 +742,7 @@ class TestKubernetesHugePagesPatchCharmLib(unittest.TestCase):
             requested_resources=ResourceRequirements(claims=None, limits={}, requests={}),
         )
 
+    @patch("lightkube.core.client.GenericSyncClient", new=Mock)
     @patch("lightkube.core.client.Client.get")
     @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.pod_is_patched")
     @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched")
@@ -809,6 +811,7 @@ class TestKubernetesHugePagesPatchCharmLib(unittest.TestCase):
             requested_resources=expected_resources,
         )
 
+    @patch("lightkube.core.client.GenericSyncClient", new=Mock)
     @patch("lightkube.core.client.Client.get")
     @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.pod_is_patched")
     @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched")
@@ -890,6 +893,7 @@ class TestKubernetesHugePagesPatchCharmLib(unittest.TestCase):
             requested_resources=expected_resources,
         )
 
+    @patch("lightkube.core.client.GenericSyncClient", new=Mock)
     def test_given_hugepages_when_generate_resources_then_hugepages_resources_are_correctly_generated(  # noqa: E501
         self,
     ):
@@ -910,6 +914,7 @@ class TestKubernetesHugePagesPatchCharmLib(unittest.TestCase):
             ),
         )
 
+    @patch("lightkube.core.client.GenericSyncClient", new=Mock)
     def test_given_hugepages_when_generate_volumes_then_hugepages_volumes_are_correctly_generated(
         self,
     ):
