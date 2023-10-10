@@ -19,3 +19,4 @@ jobs:
           CHARMCRAFT_AUTH: "${{ secrets.CHARMCRAFT_AUTH }}"
         run: |
           charmcraft publish-lib charms.kubernetes_charm_libraries.v0.multus
+          charmcraft publish-lib charms.kubernetes_charm_libraries.v0.kubernetes_hugepages_volumes_patch
