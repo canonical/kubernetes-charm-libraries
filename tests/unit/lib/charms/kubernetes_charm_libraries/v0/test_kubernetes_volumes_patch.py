@@ -5,7 +5,6 @@ from unittest.mock import Mock, patch
 
 import httpx
 from charms.kubernetes_charm_libraries.v0.kubernetes_hugepages_volumes_patch import (  # type: ignore[import]  # noqa E501
-    ContainerNotFoundError,
     KubernetesClient,
     KubernetesHugePagesPatchCharmLib,
     KubernetesHugePagesVolumesPatchError,
@@ -57,7 +56,7 @@ class TestKubernetes(unittest.TestCase):
         patch_replace.assert_not_called()
 
     @patch("lightkube.core.client.Client.replace")
-    def test_given_no_requested_volumemonuts_when_replace_statefulset_then_statefulset_is_not_replaced(  # noqa: E501
+    def test_given_no_requested_volumemounts_when_replace_statefulset_then_statefulset_is_not_replaced(  # noqa: E501
         self, patch_replace
     ):
         requested_volumes = [
@@ -476,7 +475,7 @@ class TestKubernetes(unittest.TestCase):
 
     def test_given_container_not_existing_the_get_container_raises(self):
         container_list = [Container(name="a-container")]
-        with self.assertRaises(ContainerNotFoundError):
+        with self.assertRaises(KubernetesHugePagesVolumesPatchError):
             self.kubernetes_volumes._get_container(
                 container_name="a-nonexistent-container",
                 containers=container_list,
@@ -665,7 +664,7 @@ class TestKubernetesHugePagesPatchCharmLib(unittest.TestCase):
     @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.pod_is_patched")
     @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched")
     @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.replace_statefulset")
-    def test_given_no_hugepages_and_no_existing_hugepages_when_huge_config_changed_then_replace_is_not_called(  # noqa: E501
+    def test_given_no_hugepages_and_no_existing_hugepages_when_hugepages_config_changed_then_replace_is_not_called(  # noqa: E501
         self,
         patch_replace_statefulset,
         patch_statefulset_is_patched,
@@ -686,7 +685,7 @@ class TestKubernetesHugePagesPatchCharmLib(unittest.TestCase):
     @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.pod_is_patched")
     @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched")
     @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.replace_statefulset")
-    def test_given_no_hugepages_and_existing_hugepages_when_huge_config_changed_then_replace_is_called(  # noqa: E501
+    def test_given_no_hugepages_and_existing_hugepages_when_hugepages_config_changed_then_replace_is_called(  # noqa: E501
         self,
         patch_replace_statefulset,
         patch_statefulset_is_patched,
@@ -747,7 +746,7 @@ class TestKubernetesHugePagesPatchCharmLib(unittest.TestCase):
     @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.pod_is_patched")
     @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched")
     @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.replace_statefulset")
-    def test_given_hugepages_and_no_existing_hugepages_when_huge_config_changed_then_replace_is_called(  # noqa: E501
+    def test_given_hugepages_and_no_existing_hugepages_when_hugepages_config_changed_then_replace_is_called(  # noqa: E501
         self,
         patch_replace_statefulset,
         patch_statefulset_is_patched,
@@ -816,7 +815,7 @@ class TestKubernetesHugePagesPatchCharmLib(unittest.TestCase):
     @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.pod_is_patched")
     @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched")
     @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.replace_statefulset")
-    def test_given_hugepages_and_existing_volumes_when_huge_config_changed_then_replace_is_called_all_volumes_are_kept(  # noqa: E501
+    def test_given_hugepages_and_existing_volumes_when_hugepages_config_changed_then_replace_is_called_all_volumes_are_kept(  # noqa: E501
         self,
         patch_replace_statefulset,
         patch_statefulset_is_patched,

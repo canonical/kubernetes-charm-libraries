@@ -88,10 +88,6 @@ class KubernetesHugePagesVolumesPatchError(Exception):
         super().__init__(self.message)
 
 
-class ContainerNotFoundError(ValueError):
-    """Raised when a given container does not exist in the iterable of containers."""
-
-
 class KubernetesClient:
     """Class containing all the Kubernetes specific calls."""
 
@@ -108,7 +104,8 @@ class KubernetesClient:
             container_name: Container name
 
         Raises:
-            ContainerNotFoundError, if the user-provided container name does not exist in the list.
+            KubernetesHugePagesVolumesPatchError: If the user-provided container name does
+            not exist in the list.
 
         Returns:
             Container: An instance of :class:`Container` whose name matches the given name.
@@ -116,7 +113,7 @@ class KubernetesClient:
         try:
             return next(iter(filter(lambda ctr: ctr.name == container_name, containers)))
         except StopIteration:
-            raise ContainerNotFoundError(f"Container `{container_name}` not found")
+            raise KubernetesHugePagesVolumesPatchError(f"Container `{container_name}` not found")
 
     def pod_is_patched(
         self,
@@ -132,6 +129,10 @@ class KubernetesClient:
             requested_volumemounts: Iterable of volume mounts
             requested_resources: requested resources
             container_name: Container name
+
+        Raises:
+            KubernetesHugePagesVolumesPatchError: If the user-provided pod name does
+            not exist.
 
         Returns:
             bool: Whether pod contains the given volumes mounts and resources.
@@ -167,6 +168,10 @@ class KubernetesClient:
             statefulset_name: Statefulset name
             requested_volumes: Iterable of volumes
 
+        Raises:
+            KubernetesHugePagesVolumesPatchError: If the user-provided statefulset name does
+            not exist.
+
         Returns:
             bool: Whether the statefulset contains the given volumes.
         """
@@ -179,7 +184,7 @@ class KubernetesClient:
                 logger.debug("kube-apiserver not ready yet")
             else:
                 raise KubernetesHugePagesVolumesPatchError(
-                    f"Could not get statefulset {statefulset_name}"
+                    f"Could not get statefulset `{statefulset_name}`"
                 )
             return False
         return self._statefulset_contains_requested_volumes(
@@ -199,7 +204,7 @@ class KubernetesClient:
             requested_volumes: Iterable of volumes
 
         Returns:
-            bool: whether the StatefulSet contains the given volumes.
+            bool: Whether the StatefulSet contains the given volumes.
         """
         if not statefulset_spec.template.spec.volumes:
             return False
@@ -224,7 +229,7 @@ class KubernetesClient:
             requested_volumemounts: Iterable of volume mounts that the container shall contain
 
         Returns:
-            bool: whether container spec contains the given volumemounts.
+            bool: Whether container spec contains the given volumemounts.
         """
         container = self._get_container(container_name=container_name, containers=containers)
         return all(
@@ -248,7 +253,7 @@ class KubernetesClient:
             requested_resources: resource requirements
 
         Returns:
-            bool
+            bool: whether container spec contains the expected resources requests and limits.
         """
         container = self._get_container(container_name=container_name, containers=containers)
         if requested_resources.limits:
@@ -275,6 +280,10 @@ class KubernetesClient:
     ) -> None:
         """Updates a StatefulSet and a container in its spec.
 
+        Raises:
+            KubernetesHugePagesVolumesPatchError: If the user-provided statefulset name does
+            not exist, or replacing statefulset failed.
+
         Args:
             statefulset_name: Statefulset name
             requested_volumes: Iterable of new volumes to be set in the StatefulSet
@@ -294,7 +303,7 @@ class KubernetesClient:
             )
         except ApiError:
             raise KubernetesHugePagesVolumesPatchError(
-                f"Could not get statefulset {statefulset_name}"
+                f"Could not get statefulset `{statefulset_name}`"
             )
         containers: Iterable[Container] = statefulset.spec.template.spec.containers  # type: ignore[attr-defined]  # noqa: E501
         container = self._get_container(container_name=container_name, containers=containers)
@@ -305,15 +314,19 @@ class KubernetesClient:
             self.client.replace(obj=statefulset)
         except ApiError:
             raise KubernetesHugePagesVolumesPatchError(
-                f"Could not replace statefulset {statefulset_name}"
+                f"Could not replace statefulset `{statefulset_name}`"
             )
-        logger.info("Replaced %s statefulset", statefulset_name)
+        logger.info("Replaced `%s` statefulset", statefulset_name)
 
     def list_volumes(self, statefulset_name: str) -> list[Volume]:
         """Lists current volumes in the given StatefulSet.
 
         Args:
             statefulset_name: Statefulset name
+
+        Raises:
+            KubernetesHugePagesVolumesPatchError: If the user-provided statefulset name does
+            not exist.
 
         Returns:
             list[Volume]: List of current volumes in the given StatefulSet
@@ -322,9 +335,11 @@ class KubernetesClient:
             statefulset = self.client.get(
                 res=StatefulSet, name=statefulset_name, namespace=self.namespace
             )
-            return statefulset.spec.template.spec.volumes  # type: ignore[attr-defined]
         except ApiError:
-            raise KubernetesHugePagesVolumesPatchError("Could not list volumes")
+            raise KubernetesHugePagesVolumesPatchError(
+                f"Could not get statefulset `{statefulset_name}`"
+            )
+        return statefulset.spec.template.spec.volumes  # type: ignore[attr-defined]
 
     def list_volumemounts(self, statefulset_name: str, container_name: str) -> list[VolumeMount]:
         """Lists current volume mounts in the given container.
@@ -332,6 +347,10 @@ class KubernetesClient:
         Args:
             statefulset_name: Statefulset name
             container_name: Container name
+
+        Raises:
+            KubernetesHugePagesVolumesPatchError: If the user-provided statefulset name does
+            not exist.
 
         Returns:
             list[VolumeMount]: List of current volume mounts in the given container
@@ -342,7 +361,7 @@ class KubernetesClient:
             )
         except ApiError:
             raise KubernetesHugePagesVolumesPatchError(
-                f"Could not get statefulset {statefulset_name}"
+                f"Could not get statefulset `{statefulset_name}`"
             )
         containers: Iterable[Container] = statefulset.spec.template.spec.containers  # type: ignore[attr-defined]  # noqa: E501
         container = self._get_container(container_name=container_name, containers=containers)
@@ -357,6 +376,10 @@ class KubernetesClient:
             statefulset_name: Statefulset name
             container_name: Container name
 
+        Raises:
+            KubernetesHugePagesVolumesPatchError: If the user-provided statefulset name does
+            not exist.
+
         Returns:
             ResourceRequirements: resource requirements in the given container
         """
@@ -366,7 +389,7 @@ class KubernetesClient:
             )
         except ApiError:
             raise KubernetesHugePagesVolumesPatchError(
-                f"Could not get statefulset {statefulset_name}"
+                f"Could not get statefulset `{statefulset_name}`"
             )
         containers: Iterable[
             Container
@@ -530,7 +553,7 @@ class KubernetesHugePagesPatchCharmLib(Object):
         return volume.name.startswith("hugepages")
 
     @staticmethod
-    def _limit_or_resource_is_hugepages(key: str) -> bool:
+    def _limit_or_request_is_hugepages(key: str) -> bool:
         """Returns whether the specified limit or request regards HugePages."""
         return key.startswith("hugepages")
 
@@ -586,7 +609,7 @@ class KubernetesHugePagesPatchCharmLib(Object):
         return {
             key: value
             for key, value in resource_attribute.items()
-            if not self._limit_or_resource_is_hugepages(key)
+            if not self._limit_or_request_is_hugepages(key)
         }
 
     def _generate_resource_requirements_to_be_replaced(self) -> ResourceRequirements:
