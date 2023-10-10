@@ -68,6 +68,16 @@ from lightkube.resources.core_v1 import Pod
 from ops.charm import CharmBase
 from ops.framework import BoundEvent, Object
 
+# The unique Charmhub library identifier, never change it
+LIBID = "e1d218643e2d4d47b30de592ab3694f9"
+
+# Increment this major API version when introducing breaking changes
+LIBAPI = 0
+
+# Increment this PATCH version before using `charmcraft publish-lib` or reset
+# to 0 if you are raising the major API version
+LIBPATCH = 1
+
 logger = logging.getLogger(__name__)
 
 
