@@ -69,7 +69,7 @@ from ops.charm import CharmBase
 from ops.framework import BoundEvent, Object
 
 # The unique Charmhub library identifier, never change it
-LIBID = "e1d218643e2d4d47b30de592ab3694f9"
+LIBID = "b4cf8e58c9f64b73b22083d3e8d0de8e"
 
 # Increment this major API version when introducing breaking changes
 LIBAPI = 0
@@ -82,8 +82,8 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class RequestedHugePages:
-    """RequestedHugePages."""
+class HugePagesVolume:
+    """HugePagesVolume."""
 
     mount_path: str
     size: str = "1Gi"
@@ -414,7 +414,7 @@ class KubernetesHugePagesPatchCharmLib(Object):
     def __init__(
         self,
         charm: CharmBase,
-        hugepages_volumes_func: Callable[[], Iterable[RequestedHugePages]],
+        hugepages_volumes_func: Callable[[], Iterable[HugePagesVolume]],
         container_name: str,
         refresh_event: BoundEvent,
     ):
@@ -546,7 +546,11 @@ class KubernetesHugePagesPatchCharmLib(Object):
         requests = {}
         for hugepage in self.hugepages_volumes_func():
             limits.update({f"hugepages-{hugepage.size}": hugepage.limit})
+            limits.update({"cpu": "2"})
+            limits.update({"memory": "512Mi"})
             requests.update({f"hugepages-{hugepage.size}": hugepage.limit})
+            requests.update({"cpu": "2"})
+            requests.update({"memory": "512Mi"})
         return ResourceRequirements(
             limits=limits,
             requests=requests,

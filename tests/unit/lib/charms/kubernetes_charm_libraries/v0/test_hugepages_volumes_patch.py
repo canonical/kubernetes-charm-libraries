@@ -1,14 +1,15 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 import unittest
+from copy import copy
 from unittest.mock import Mock, patch
 
 import httpx
-from charms.kubernetes_charm_libraries.v0.kubernetes_hugepages_volumes_patch import (  # type: ignore[import]  # noqa E501
+from charms.kubernetes_charm_libraries.v0.hugepages_volumes_patch import (  # type: ignore[import]  # noqa E501
+    HugePagesVolume,
     KubernetesClient,
     KubernetesHugePagesPatchCharmLib,
     KubernetesHugePagesVolumesPatchError,
-    RequestedHugePages,
 )
 from lightkube.core.exceptions import ApiError
 from lightkube.models.apps_v1 import StatefulSet, StatefulSetSpec
@@ -27,13 +28,13 @@ from ops import EventBase, EventSource
 from ops.charm import CharmBase, CharmEvents
 from ops.testing import Harness
 
-VOLUMES_LIBRARY_PATH = "charms.kubernetes_charm_libraries.v0.kubernetes_hugepages_volumes_patch"
+VOLUMES_LIBRARY_PATH = "charms.kubernetes_charm_libraries.v0.hugepages_volumes_patch"
 
 CONTAINER_NAME = "whatever container name"
 STATEFULSET_NAME = "whatever statefulset name"
 
 
-class TestKubernetes(unittest.TestCase):
+class TestKubernetesClient(unittest.TestCase):
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
     def setUp(self) -> None:
         self.namespace = "whatever ns"
@@ -107,6 +108,10 @@ class TestKubernetes(unittest.TestCase):
         )
         patch_get.return_value = initial_statefulset
 
+        expected_statefulset = copy(initial_statefulset)
+        expected_statefulset.spec.template.spec.volumes = requested_volumes
+        expected_statefulset.spec.template.spec.containers[0].volumeMounts = requested_volumemounts
+
         self.kubernetes_volumes.replace_statefulset(
             statefulset_name=STATEFULSET_NAME,
             requested_volumes=requested_volumes,
@@ -114,7 +119,7 @@ class TestKubernetes(unittest.TestCase):
             requested_volumemounts=requested_volumemounts,
             container_name=CONTAINER_NAME,
         )
-        patch_replace.assert_called()
+        patch_replace.assert_called_with(obj=expected_statefulset)
 
     @patch("lightkube.core.client.Client.get")
     def test_given_k8s_get_throws_api_error_when_replace_statefulset_then_custom_exception_is_raised(  # noqa: E501
@@ -632,7 +637,7 @@ class _TestCharmNoVolumes(CharmBase):
         )
 
     @staticmethod
-    def _volumes_func() -> list[RequestedHugePages]:
+    def _volumes_func() -> list[HugePagesVolume]:
         return []
 
 
@@ -649,9 +654,9 @@ class _TestCharmAddVolumes(CharmBase):
         )
 
     @staticmethod
-    def _volumes_func() -> list[RequestedHugePages]:
+    def _volumes_func() -> list[HugePagesVolume]:
         return [
-            RequestedHugePages(
+            HugePagesVolume(
                 mount_path="/dev/hugepages",
                 size="1Gi",
                 limit="4Gi",
@@ -766,8 +771,16 @@ class TestKubernetesHugePagesPatchCharmLib(unittest.TestCase):
             )
         ]
         expected_resources = ResourceRequirements(
-            limits={"hugepages-1Gi": "4Gi"},
-            requests={"hugepages-1Gi": "4Gi"},
+            limits={
+                "hugepages-1Gi": "4Gi",
+                "cpu": "2",
+                "memory": "512Mi",
+            },
+            requests={
+                "hugepages-1Gi": "4Gi",
+                "cpu": "2",
+                "memory": "512Mi",
+            },
         )
         current_podspec = PodSpec(
             containers=[
@@ -848,8 +861,18 @@ class TestKubernetesHugePagesPatchCharmLib(unittest.TestCase):
             )
         ]
         expected_resources = ResourceRequirements(
-            limits={"a-limit": "a-value", "hugepages-1Gi": "4Gi"},
-            requests={"a-request": "a-value", "hugepages-1Gi": "4Gi"},
+            limits={
+                "a-limit": "a-value",
+                "hugepages-1Gi": "4Gi",
+                "cpu": "2",
+                "memory": "512Mi",
+            },
+            requests={
+                "a-request": "a-value",
+                "hugepages-1Gi": "4Gi",
+                "cpu": "2",
+                "memory": "512Mi",
+            },
         )
         current_podspec = PodSpec(
             containers=[
@@ -906,9 +929,15 @@ class TestKubernetesHugePagesPatchCharmLib(unittest.TestCase):
         self.assertEqual(
             generated_resources,
             ResourceRequirements(
-                limits={"hugepages-1Gi": "4Gi"},
+                limits={
+                    "hugepages-1Gi": "4Gi",
+                    "cpu": "2",
+                    "memory": "512Mi",
+                },
                 requests={
                     "hugepages-1Gi": "4Gi",
+                    "cpu": "2",
+                    "memory": "512Mi",
                 },
             ),
         )
