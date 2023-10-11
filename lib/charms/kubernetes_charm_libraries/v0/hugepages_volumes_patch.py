@@ -451,6 +451,9 @@ class KubernetesHugePagesPatchCharmLib(Object):
     ) -> bool:
         """Returns whether pod contains given volume mounts and resource limits.
 
+        If no HugePages volumeMount is requested, it returns whether other HugePages
+        volumeMounts are present in the pod.
+
         Args:
             requested_volumemounts: Iterable of volume mounts to be set in the pod.
             requested_resources: resource requirements to be set in the pod.
@@ -458,6 +461,15 @@ class KubernetesHugePagesPatchCharmLib(Object):
         Returns:
             bool: Whether pod contains given volume mounts and resource limits.
         """
+        if not requested_volumemounts:
+            return not any(
+                [
+                    self._volumemount_is_hugepages(x)
+                    for x in self.kubernetes.list_volumemounts(
+                        statefulset_name=self.model.app.name, container_name=self.container_name
+                    )
+                ]
+            )
         return self.kubernetes.pod_is_patched(
             pod_name=self._pod,
             requested_volumemounts=requested_volumemounts,
@@ -477,12 +489,24 @@ class KubernetesHugePagesPatchCharmLib(Object):
     def _statefulset_is_patched(self, requested_volumes: Iterable[Volume]) -> bool:
         """Returns whether statefulset contains requested volumes.
 
+        If no HugePages volume is requested, it returns whether other HugePages
+        volumes are present in the statefulset.
+
         Args:
             requested_volumes: Iterable of volumes to be set in the statefulset
 
         Returns:
             bool: Whether statefulset contains requested volumes.
         """
+        if not requested_volumes:
+            return not any(
+                [
+                    self._volume_is_hugepages(volume)
+                    for volume in self.kubernetes.list_volumes(
+                        statefulset_name=self.model.app.name
+                    )
+                ]
+            )
         return self.kubernetes.statefulset_is_patched(
             statefulset_name=self.model.app.name,
             requested_volumes=requested_volumes,

@@ -666,6 +666,9 @@ class _TestCharmAddVolumes(CharmBase):
 
 class TestKubernetesHugePagesPatchCharmLib(unittest.TestCase):
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
+    @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.list_volumes")
+    @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.list_volumemounts")
+    @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.list_container_resources")
     @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.pod_is_patched")
     @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched")
     @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.replace_statefulset")
@@ -674,7 +677,13 @@ class TestKubernetesHugePagesPatchCharmLib(unittest.TestCase):
         patch_replace_statefulset,
         patch_statefulset_is_patched,
         patch_pod_is_patched,
+        patch_list_container_resources,
+        patch_list_volumemounts,
+        patch_list_volumes,
     ):
+        patch_list_volumes.return_value = []
+        patch_list_volumemounts.return_value = []
+        patch_list_container_resources.return_value = ResourceRequirements()
         patch_pod_is_patched.return_value = True
         patch_statefulset_is_patched.return_value = True
         harness = Harness(_TestCharmNoVolumes)
@@ -725,6 +734,8 @@ class TestKubernetesHugePagesPatchCharmLib(unittest.TestCase):
             )
         )
         patch_get.side_effect = [
+            current_statefulset,
+            current_statefulset,
             current_statefulset,
             current_statefulset,
             current_statefulset,
