@@ -41,40 +41,6 @@ class TestKubernetesClient(unittest.TestCase):
         self.kubernetes_volumes = KubernetesClient(namespace=self.namespace)
 
     @patch("lightkube.core.client.Client.replace")
-    def test_given_no_requested_volume_when_replace_statefulset_then_statefulset_is_not_replaced(
-        self, patch_replace
-    ):
-        requested_volumes = []
-
-        self.kubernetes_volumes.replace_statefulset(
-            statefulset_name=STATEFULSET_NAME,
-            requested_volumes=requested_volumes,
-            requested_volumemounts=[],
-            requested_resources=ResourceRequirements(),
-            container_name=CONTAINER_NAME,
-        )
-
-        patch_replace.assert_not_called()
-
-    @patch("lightkube.core.client.Client.replace")
-    def test_given_no_requested_volumemounts_when_replace_statefulset_then_statefulset_is_not_replaced(  # noqa: E501
-        self, patch_replace
-    ):
-        requested_volumes = [
-            Volume(name="a-volume", emptyDir=EmptyDirVolumeSource(medium="a-medium")),
-        ]
-
-        self.kubernetes_volumes.replace_statefulset(
-            statefulset_name=STATEFULSET_NAME,
-            requested_volumes=requested_volumes,
-            requested_volumemounts=[],
-            requested_resources=ResourceRequirements(),
-            container_name=CONTAINER_NAME,
-        )
-
-        patch_replace.assert_not_called()
-
-    @patch("lightkube.core.client.Client.replace")
     @patch("lightkube.core.client.Client.get")
     def test_given_statefulset_doesnt_have_requested_volumes_when_replace_statefulset_then_statefulset_is_replaced(  # noqa: E501
         self, patch_get, patch_replace

@@ -303,10 +303,8 @@ class KubernetesClient:
         """
         if not requested_volumes:
             logger.warning("No requested volumes were provided")
-            return
         if not requested_volumemounts:
             logger.warning("No requested volume mounts were provided")
-            return
         try:
             statefulset = self.client.get(
                 res=StatefulSet, name=statefulset_name, namespace=self.namespace
