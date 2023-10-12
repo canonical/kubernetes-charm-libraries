@@ -3,8 +3,7 @@
 
 """Charm library used to manage HugePages volumes in Kubernetes charms.
 
-- On bound event (e.g. self.on.hugepages_volumes_config_changed which is originated
-from K8sHugePagesVolumePatchChangedEvent), it will:
+- On a bound event (e.g., self.on.hugepages_volumes_config_changed), it will:
   - Replace the volumes in the StatefulSet with the new requested ones
   - Replace the volume mounts in the container in the Pod with the new requested ones.
   - Replace the resource requirements in the container in the Pod with the new requested ones.
@@ -15,7 +14,7 @@ from K8sHugePagesVolumePatchChangedEvent), it will:
 
 from charms.kubernetes_charm_libraries.v0.kubernetes_hugepages_volumes_patch import (
     KubernetesHugePagesPatchCharmLib,
-    RequestedHugePages,
+    HugePagesVolume,
 )
 
 
@@ -39,9 +38,9 @@ class YourCharm(CharmBase):
             refresh_event=self.on.hugepages_volumes_config_changed,
         )
 
-    def _hugepages_volumes_func_from_config(self) -> list[RequestedHugePages]:
+    def _hugepages_volumes_func_from_config(self) -> list[HugePagesVolume]:
         return [
-            RequestedHugePages(
+            HugePagesVolume(
                 mount_path="/dev/hugepages",
                 size="1Gi",
                 limit="4Gi",
@@ -421,7 +420,7 @@ class KubernetesHugePagesPatchCharmLib(Object):
         Args:
             charm: Charm object
             hugepages_volumes_func: A callable to a function returning a list of
-              `RequestedHugePages` to be created.
+              `HugePagesVolume` to be created.
             container_name: Container name
             refresh_event: a bound event which will be observed to re-apply the patch.
         """
