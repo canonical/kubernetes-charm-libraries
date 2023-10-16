@@ -7,15 +7,46 @@ on:
         required: true
 
 jobs:
-  publish-libs:
+  multus-lib-needs-publishing:
     runs-on: ubuntu-22.04
+    outputs:
+      needs-publishing: ${{ steps.changes.outputs.multus }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Install charmcraft
-        run: sudo snap install charmcraft --classic
-      - name: Publish libs
-        env:
-          CHARMCRAFT_AUTH: "${{ secrets.CHARMCRAFT_AUTH }}"
-        run: |
-          charmcraft publish-lib charms.kubernetes_charm_libraries.v0.multus
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            multus:
+              - 'lib/charms/kubernetes_charm_libraries/v0/multus.py'
+
+  publish-multus-lib:
+    name: Publish Multus library
+    needs:
+      - multus-lib-needs-publishing
+    uses: canonical/sdcore-github-workflows/.github/workflows/publish-lib.yaml@main
+    with:
+      lib-name: "charms.kubernetes_charm_libraries.v0.multus"
+    secrets: inherit
+
+  hugepages-lib-needs-publishing:
+    runs-on: ubuntu-22.04
+    outputs:
+      needs-publishing: ${{ steps.changes.outputs.hugepages }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            hugepages:
+              - 'lib/charms/kubernetes_charm_libraries/v0/hugepages_volumes_patch.py'
+
+  publish-hugepages-lib:
+    name: Publish HugePages library
+    needs:
+      - hugepages-lib-needs-publishing
+    uses: canonical/sdcore-github-workflows/.github/workflows/publish-lib.yaml@main
+    with:
+      lib-name: "charms.kubernetes_charm_libraries.v0.hugepages_volumes_patch"
+    secrets: inherit
