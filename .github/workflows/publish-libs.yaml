@@ -45,7 +45,7 @@ jobs:
   publish-hugepages-lib:
     name: Publish HugePages library
     needs:
-      - multus-lib-needs-publishing
+      - hugepages-lib-needs-publishing
     uses: canonical/sdcore-github-workflows/.github/workflows/publish-lib.yaml@main
     with:
       lib-name: "charms.kubernetes_charm_libraries.v0.hugepages_volumes_patch"
