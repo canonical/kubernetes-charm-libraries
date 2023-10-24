@@ -751,12 +751,10 @@ class TestKubernetesHugePagesPatchCharmLib(unittest.TestCase):
             limits={
                 "hugepages-1Gi": "4Gi",
                 "cpu": "2",
-                "memory": "512Mi",
             },
             requests={
                 "hugepages-1Gi": "4Gi",
                 "cpu": "2",
-                "memory": "512Mi",
             },
         )
         current_podspec = PodSpec(
@@ -842,13 +840,11 @@ class TestKubernetesHugePagesPatchCharmLib(unittest.TestCase):
                 "a-limit": "a-value",
                 "hugepages-1Gi": "4Gi",
                 "cpu": "2",
-                "memory": "512Mi",
             },
             requests={
                 "a-request": "a-value",
                 "hugepages-1Gi": "4Gi",
                 "cpu": "2",
-                "memory": "512Mi",
             },
         )
         current_podspec = PodSpec(
@@ -909,12 +905,10 @@ class TestKubernetesHugePagesPatchCharmLib(unittest.TestCase):
                 limits={
                     "hugepages-1Gi": "4Gi",
                     "cpu": "2",
-                    "memory": "512Mi",
                 },
                 requests={
                     "hugepages-1Gi": "4Gi",
                     "cpu": "2",
-                    "memory": "512Mi",
                 },
             ),
         )
