@@ -14,7 +14,6 @@ from charms.kubernetes_charm_libraries.v0.multus import (  # type: ignore[import
     NetworkAnnotation,
     NetworkAttachmentDefinition,
 )
-from dataclass_wizard import asdict  # type: ignore[import]
 from lightkube.core.exceptions import ApiError
 from lightkube.models.apps_v1 import StatefulSet, StatefulSetSpec
 from lightkube.models.core_v1 import (
@@ -239,12 +238,7 @@ class TestKubernetes(unittest.TestCase):
         self.assertEqual(kwargs["name"], statefulset_name)
         self.assertEqual(
             kwargs["obj"].spec.template.metadata.annotations["k8s.v1.cni.cncf.io/networks"],
-            json.dumps(
-                [
-                    asdict(network_annotation, skip_defaults=True)
-                    for network_annotation in network_annotations
-                ]
-            ),
+            json.dumps([network_annotation.dict() for network_annotation in network_annotations]),
         )
         self.assertEqual(
             kwargs["obj"].spec.template.spec.containers[0].securityContext.capabilities.add,
@@ -306,12 +300,7 @@ class TestKubernetes(unittest.TestCase):
         args, kwargs = patch_patch.call_args
         self.assertEqual(
             kwargs["obj"].spec.template.metadata.annotations["k8s.v1.cni.cncf.io/networks"],
-            json.dumps(
-                [
-                    asdict(network_annotation, skip_defaults=True)
-                    for network_annotation in network_annotations
-                ]
-            ),
+            json.dumps([network_annotation.dict() for network_annotation in network_annotations]),
         )
 
     @patch("lightkube.core.client.Client.get")
@@ -389,7 +378,7 @@ class TestKubernetes(unittest.TestCase):
                         annotations={
                             "k8s.v1.cni.cncf.io/networks": json.dumps(
                                 [
-                                    asdict(network_annotation, skip_defaults=True)
+                                    network_annotation.dict()
                                     for network_annotation in network_annotations_in_statefulset
                                 ]
                             )
@@ -435,7 +424,7 @@ class TestKubernetes(unittest.TestCase):
                         annotations={
                             "k8s.v1.cni.cncf.io/networks": json.dumps(
                                 [
-                                    asdict(network_annotation, skip_defaults=True)
+                                    network_annotation.dict()
                                     for network_annotation in network_annotations
                                 ]
                             )
@@ -474,7 +463,7 @@ class TestKubernetes(unittest.TestCase):
                         annotations={
                             "k8s.v1.cni.cncf.io/networks": json.dumps(
                                 [
-                                    asdict(network_annotation, skip_defaults=True)
+                                    network_annotation.dict()
                                     for network_annotation in network_annotations
                                 ]
                             )
@@ -562,9 +551,7 @@ class TestKubernetes(unittest.TestCase):
         patch_get.return_value = Pod(
             metadata=ObjectMeta(
                 annotations={
-                    "k8s.v1.cni.cncf.io/networks": json.dumps(
-                        [asdict(existing_network_annotation, skip_defaults=True)]
-                    )
+                    "k8s.v1.cni.cncf.io/networks": json.dumps([existing_network_annotation.dict()])
                 }
             )
         )
@@ -588,9 +575,7 @@ class TestKubernetes(unittest.TestCase):
         patch_get.return_value = Pod(
             metadata=ObjectMeta(
                 annotations={
-                    "k8s.v1.cni.cncf.io/networks": json.dumps(
-                        [asdict(network_annotation, skip_defaults=True)]
-                    )
+                    "k8s.v1.cni.cncf.io/networks": json.dumps([network_annotation.dict()])
                 }
             ),
             spec=PodSpec(
@@ -622,9 +607,7 @@ class TestKubernetes(unittest.TestCase):
         patch_get.return_value = Pod(
             metadata=ObjectMeta(
                 annotations={
-                    "k8s.v1.cni.cncf.io/networks": json.dumps(
-                        [asdict(network_annotation, skip_defaults=True)]
-                    )
+                    "k8s.v1.cni.cncf.io/networks": json.dumps([network_annotation.dict()])
                 }
             ),
             spec=PodSpec(

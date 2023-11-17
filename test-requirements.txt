@@ -1,6 +1,5 @@
 black
 coverage[toml]
-dataclass-wizard
 flake8-docstrings
 flake8-builtins
 isort
