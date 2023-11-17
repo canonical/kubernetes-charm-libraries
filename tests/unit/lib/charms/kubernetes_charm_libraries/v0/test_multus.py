@@ -14,7 +14,7 @@ from charms.kubernetes_charm_libraries.v0.multus import (  # type: ignore[import
     NetworkAnnotation,
     NetworkAttachmentDefinition,
 )
-from dataclass_wizard import asdict
+from dataclass_wizard import asdict  # type: ignore[import]
 from lightkube.core.exceptions import ApiError
 from lightkube.models.apps_v1 import StatefulSet, StatefulSetSpec
 from lightkube.models.core_v1 import (
@@ -271,7 +271,7 @@ class TestKubernetes(unittest.TestCase):
                 interface="whatever interface 2",
                 name="whatever name 2",
                 mac="whatever mac 2",
-                ips=["4.3.2.1"]
+                ips=["4.3.2.1"],
             ),
         ]
         initial_statefulset = StatefulSet(
