@@ -1,3 +1,4 @@
+dataclass-wizard
 ops >= 2.2.0
 lightkube
 lightkube-models
