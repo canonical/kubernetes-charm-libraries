@@ -247,6 +247,62 @@ class TestKubernetes(unittest.TestCase):
         self.assertEqual(kwargs["patch_type"], PatchType.APPLY)
         self.assertEqual(kwargs["namespace"], self.namespace)
 
+    @patch("lightkube.core.client.Client.patch")
+    @patch("lightkube.core.client.Client.get")
+    def test_given_network_annotations_with_optional_arguments_when_patch_statefulset_without_network_annotations_then_requested_network_annotations_are_added(  # noqa: E501
+        self, patch_get, patch_patch
+    ):
+        container_name = "whatever container name"
+        statefulset_name = "whatever statefulset name"
+        network_annotations = [
+            NetworkAnnotation(
+                interface="whatever interface 1",
+                name="whatever name 1",
+                mac="whatever mac 1",
+                ips=["1.2.3.4"],
+            ),
+            NetworkAnnotation(
+                interface="whatever interface 2",
+                name="whatever name 2",
+                mac="whatever mac 2",
+                ips=["4.3.2.1"],
+            ),
+        ]
+        initial_statefulset = StatefulSet(
+            spec=StatefulSetSpec(
+                selector=LabelSelector(),
+                serviceName="",
+                template=PodTemplateSpec(
+                    metadata=ObjectMeta(
+                        annotations={},
+                    ),
+                    spec=PodSpec(
+                        containers=[
+                            Container(
+                                name=container_name,
+                                securityContext=SecurityContext(),
+                            )
+                        ]
+                    ),
+                ),
+            )
+        )
+        patch_get.return_value = initial_statefulset
+
+        self.kubernetes_multus.patch_statefulset(
+            name=statefulset_name,
+            network_annotations=network_annotations,
+            container_name="container-name",
+            cap_net_admin=True,
+            privileged=False,
+        )
+
+        args, kwargs = patch_patch.call_args
+        self.assertEqual(
+            kwargs["obj"].spec.template.metadata.annotations["k8s.v1.cni.cncf.io/networks"],
+            json.dumps([network_annotation.dict() for network_annotation in network_annotations]),
+        )
+
     @patch("lightkube.core.client.Client.get")
     def test_given_k8s_get_throws_unauthorized_api_error_when_statefulset_is_patched_then_returns_false(  # noqa: E501
         self, patch_get
