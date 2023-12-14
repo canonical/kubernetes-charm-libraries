@@ -1170,6 +1170,16 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
         )
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
+    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.unpatch_statefulset")
+    def test_statefulset_unpatched_on_remove(self, patch_unpatch_statefulset):
+        harness = Harness(_TestCharmMultipleNAD)
+        self.addCleanup(harness.cleanup)
+        harness.begin()
+        harness.charm.on.remove.emit()
+
+        patch_unpatch_statefulset.assert_called()
+
+    @patch("lightkube.core.client.GenericSyncClient", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_network_attachment_definition")
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.network_attachment_definition_is_created")
     def test_given_nad_is_created_when_remove_then_network_attachment_definitions_are_deleted(
