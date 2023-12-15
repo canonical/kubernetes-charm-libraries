@@ -1171,7 +1171,7 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.unpatch_statefulset")
-    def test_statefulset_unpatched_on_remove(self, patch_unpatch_statefulset):
+    def test_given_when_removed_then_statefulset_unpatched(self, patch_unpatch_statefulset):
         harness = Harness(_TestCharmMultipleNAD)
         self.addCleanup(harness.cleanup)
         harness.begin()
