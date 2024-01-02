@@ -123,7 +123,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 11
+LIBPATCH = 12
 
 
 logger = logging.getLogger(__name__)
@@ -543,6 +543,23 @@ class KubernetesClient:
                     return False
         return True
 
+    def multus_is_available(self) -> bool:
+        """Check whether Multus is enabled leveraging existence of NAD custom resource.
+
+        Returns:
+            bool: Whether Multus is enabled
+        """
+        try:
+            list(self.client.list(res=NetworkAttachmentDefinition, namespace=self.namespace))
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return False
+            else:
+                raise KubernetesMultusError(
+                    "Unexpected outcome when checking for Multus availability"
+                )
+        return True
+
 
 class KubernetesMultusCharmLib(Object):
     """Class to be instantiated by charms requiring Multus networking."""
@@ -726,3 +743,11 @@ class KubernetesMultusCharmLib(Object):
     def delete_pod(self) -> None:
         """Delete the pod."""
         self.kubernetes.delete_pod(self._pod)
+
+    def multus_is_available(self) -> bool:
+        """Check whether Multus is enabled leveraging existence of NAD custom resource.
+
+        Returns:
+            bool: Whether Multus is enabled
+        """
+        return self.kubernetes.multus_is_available()

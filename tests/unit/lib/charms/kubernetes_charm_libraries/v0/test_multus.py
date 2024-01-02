@@ -657,6 +657,30 @@ class TestKubernetes(unittest.TestCase):
         with pytest.raises(KubernetesMultusError):
             self.kubernetes_multus.list_network_attachment_definitions()
 
+    @patch("lightkube.core.client.Client.list")
+    def test_given_multus_disabled_when_check_multus_then_returns_false(  # noqa: E501
+        self, patch_list
+    ):
+        patch_list.side_effect = httpx.HTTPStatusError(
+            message="",
+            request=httpx.Request(method="GET", url=""),
+            response=httpx.Response(status_code=404),
+        )
+
+        multus_is_available = self.kubernetes_multus.multus_is_available()
+
+        self.assertEqual(multus_is_available, False)
+
+    @patch("lightkube.core.client.Client.list")
+    def test_given_multus_enabled_when_check_multus_then_returns_true(  # noqa: E501
+        self, patch_list
+    ):
+        patch_list.return_value = ["whatever", "list", "content"]
+
+        multus_is_available = self.kubernetes_multus.multus_is_available()
+
+        self.assertEqual(multus_is_available, True)
+
     @patch("lightkube.core.client.Client.delete")
     def test_given_pod_is_deleted_when_delete_pod_then_client_delete_is_called_by_pod_name_and_namespace(  # noqa: E501
         self, patch_delete
