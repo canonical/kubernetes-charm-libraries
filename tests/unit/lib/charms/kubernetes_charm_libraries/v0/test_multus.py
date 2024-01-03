@@ -672,6 +672,19 @@ class TestKubernetes(unittest.TestCase):
         self.assertEqual(multus_is_available, False)
 
     @patch("lightkube.core.client.Client.list")
+    def test_given_http_error_when_check_multus_then_then_multus_error_is_raised(  # noqa: E501
+        self, patch_list
+    ):
+        patch_list.side_effect = httpx.HTTPStatusError(
+            message="",
+            request=httpx.Request(method="GET", url=""),
+            response=httpx.Response(status_code=509),
+        )
+
+        with self.assertRaises(KubernetesMultusError):
+            self.kubernetes_multus.multus_is_available()
+
+    @patch("lightkube.core.client.Client.list")
     def test_given_multus_enabled_when_check_multus_then_returns_true(  # noqa: E501
         self, patch_list
     ):
