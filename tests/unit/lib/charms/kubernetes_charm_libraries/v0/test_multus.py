@@ -723,16 +723,20 @@ class _TestCharmNoNAD(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
-        self.network_annotations = []
         self.kubernetes_multus = KubernetesMultusCharmLib(
             charm=self,
-            network_attachment_definitions_func=self._network_annotations_func,
-            network_annotations=self.network_annotations,
+            network_attachment_definitions_func=self.network_attachment_definitions_func,
+            network_annotations_func=self.network_annotations_func,
             container_name="container-name",
             refresh_event=self.on.nad_config_changed,
         )
 
-    def _network_annotations_func(self) -> list[NetworkAttachmentDefinition]:
+    @staticmethod
+    def network_attachment_definitions_func() -> list[NetworkAttachmentDefinition]:
+        return []
+
+    @staticmethod
+    def network_annotations_func() -> list[NetworkAnnotation]:
         return []
 
 
@@ -762,14 +766,10 @@ class _TestCharmMultipleNAD(CharmBase):
         }
         self.annotation_1_name = "eth0"
         self.annotation_2_name = "eth1"
-        self.network_annotations = [
-            NetworkAnnotation(interface=self.nad_1_name, name=self.annotation_1_name),
-            NetworkAnnotation(interface=self.nad_2_name, name=self.annotation_2_name),
-        ]
         self.kubernetes_multus = KubernetesMultusCharmLib(
             charm=self,
             network_attachment_definitions_func=self.network_attachment_definitions_func,
-            network_annotations=self.network_annotations,
+            network_annotations_func=self.network_annotations_func,
             container_name=self.container_name,
             refresh_event=self.on.nad_config_changed,
         )
@@ -784,6 +784,12 @@ class _TestCharmMultipleNAD(CharmBase):
                 metadata=ObjectMeta(name=self.nad_2_name),
                 spec=self.nad_2_spec,
             ),
+        ]
+
+    def network_annotations_func(self) -> list[NetworkAnnotation]:
+        return [
+            NetworkAnnotation(interface=self.nad_1_name, name=self.annotation_1_name),
+            NetworkAnnotation(interface=self.nad_2_name, name=self.annotation_2_name),
         ]
 
 
