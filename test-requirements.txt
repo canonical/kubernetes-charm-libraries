@@ -14,7 +14,6 @@ cachetools==5.3.3
     # via google-auth
 certifi==2024.7.4
     # via
-    #   -c requirements.txt
     #   kubernetes
     #   requests
 cffi==1.16.0
@@ -25,7 +24,7 @@ charset-normalizer==3.3.2
     # via requests
 click==8.1.7
     # via black
-coverage[toml]==7.5.4
+coverage[toml]==7.6.0
     # via -r test-requirements.in
 cryptography==42.0.8
     # via paramiko
@@ -50,9 +49,7 @@ google-auth==2.31.0
 hvac==2.3.0
     # via juju
 idna==3.7
-    # via
-    #   -c requirements.txt
-    #   requests
+    # via requests
 iniconfig==2.0.0
     # via pytest
 ipdb==0.13.13
@@ -65,7 +62,7 @@ jedi==0.19.1
     # via ipython
 jinja2==3.1.4
     # via pytest-operator
-juju==3.5.0.0
+juju==3.5.2.0
     # via
     #   -r test-requirements.in
     #   pytest-operator
@@ -162,7 +159,6 @@ pytz==2024.1
     # via pyrfc3339
 pyyaml==6.0.1
     # via
-    #   -c requirements.txt
     #   juju
     #   kubernetes
     #   pytest-operator
@@ -195,7 +191,7 @@ traitlets==5.14.3
     #   matplotlib-inline
 types-pyyaml==6.0.12.20240311
     # via -r test-requirements.in
-types-setuptools==70.2.0.20240704
+types-setuptools==70.3.0.20240710
     # via -r test-requirements.in
 types-toml==0.10.8.20240310
     # via -r test-requirements.in
@@ -212,8 +208,6 @@ urllib3==2.2.2
 wcwidth==0.2.13
     # via prompt-toolkit
 websocket-client==1.8.0
-    # via
-    #   -c requirements.txt
-    #   kubernetes
+    # via kubernetes
 websockets==12.0
     # via juju
