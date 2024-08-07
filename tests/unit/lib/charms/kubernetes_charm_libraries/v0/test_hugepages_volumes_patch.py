@@ -5,7 +5,7 @@ from copy import copy
 from unittest.mock import Mock, patch
 
 import httpx
-from charms.kubernetes_charm_libraries.v0.hugepages_volumes_patch import (  # type: ignore[import]  # noqa E501
+from charms.kubernetes_charm_libraries.v0.hugepages_volumes_patch import (
     HugePagesVolume,
     KubernetesClient,
     KubernetesHugePagesPatchCharmLib,
@@ -75,8 +75,12 @@ class TestKubernetesClient(unittest.TestCase):
         patch_get.return_value = initial_statefulset
 
         expected_statefulset = copy(initial_statefulset)
+        assert expected_statefulset.spec
+        assert expected_statefulset.spec.template.spec
         expected_statefulset.spec.template.spec.volumes = requested_volumes
-        expected_statefulset.spec.template.spec.containers[0].volumeMounts = requested_volumemounts
+        expected_statefulset.spec.template.spec.containers[
+            0
+        ].volumeMounts = requested_volumemounts
 
         self.kubernetes_volumes.replace_statefulset(
             statefulset_name=STATEFULSET_NAME,
@@ -104,7 +108,9 @@ class TestKubernetesClient(unittest.TestCase):
         requested_resources = ResourceRequirements()
         patch_get.side_effect = ApiError(
             request=httpx.Request(method="GET", url="http://whatever.com"),
-            response=httpx.Response(status_code=500, json={"reason": "Internal Server Error"}),
+            response=httpx.Response(
+                status_code=500, json={"reason": "Internal Server Error"}
+            ),
         )
         with self.assertRaises(KubernetesHugePagesVolumesPatchError):
             self.kubernetes_volumes.replace_statefulset(
@@ -145,7 +151,9 @@ class TestKubernetesClient(unittest.TestCase):
         patch_get.return_value = initial_statefulset
         patch_replace.side_effect = ApiError(
             request=httpx.Request(method="GET", url="http://whatever.com"),
-            response=httpx.Response(status_code=500, json={"reason": "Internal Server Error"}),
+            response=httpx.Response(
+                status_code=500, json={"reason": "Internal Server Error"}
+            ),
         )
         with self.assertRaises(KubernetesHugePagesVolumesPatchError):
             self.kubernetes_volumes.replace_statefulset(
@@ -165,7 +173,9 @@ class TestKubernetesClient(unittest.TestCase):
         ]
         patch_get.side_effect = ApiError(
             request=httpx.Request(method="GET", url="http://whatever.com"),
-            response=httpx.Response(status_code=500, json={"reason": "Internal Server Error"}),
+            response=httpx.Response(
+                status_code=500, json={"reason": "Internal Server Error"}
+            ),
         )
         with self.assertRaises(KubernetesHugePagesVolumesPatchError):
             self.kubernetes_volumes.statefulset_is_patched(
@@ -224,10 +234,15 @@ class TestKubernetesClient(unittest.TestCase):
         self, patch_get
     ):
         requested_volumes_in_statefulset = [
-            Volume(name="a-volume-existing", emptyDir=EmptyDirVolumeSource(medium="a-medium")),
+            Volume(
+                name="a-volume-existing",
+                emptyDir=EmptyDirVolumeSource(medium="a-medium"),
+            ),
         ]
         requested_volumes = [
-            Volume(name="a-volume-new", emptyDir=EmptyDirVolumeSource(medium="a-medium")),
+            Volume(
+                name="a-volume-new", emptyDir=EmptyDirVolumeSource(medium="a-medium")
+            ),
         ]
         patch_get.return_value = StatefulSet(
             spec=StatefulSetSpec(
@@ -282,7 +297,9 @@ class TestKubernetesClient(unittest.TestCase):
     ):
         patch_get.side_effect = ApiError(
             request=httpx.Request(method="GET", url="http://whatever.com"),
-            response=httpx.Response(status_code=500, json={"reason": "Internal Server Error"}),
+            response=httpx.Response(
+                status_code=500, json={"reason": "Internal Server Error"}
+            ),
         )
         requested_volumemounts = [
             VolumeMount(
@@ -390,7 +407,9 @@ class TestKubernetesClient(unittest.TestCase):
         self.assertFalse(is_patched)
 
     @patch("lightkube.core.client.Client.get")
-    def test_given_pod_is_patched_when_pod_is_patched_then_returns_true(self, patch_get):
+    def test_given_pod_is_patched_when_pod_is_patched_then_returns_true(
+        self, patch_get
+    ):
         requested_volumemounts = [
             VolumeMount(
                 name="a-volume-mount",
@@ -485,7 +504,9 @@ class TestKubernetesClient(unittest.TestCase):
     ):
         patch_get.side_effect = ApiError(
             request=httpx.Request(method="GET", url="http://whatever.com"),
-            response=httpx.Response(status_code=500, json={"reason": "Internal Server Error"}),
+            response=httpx.Response(
+                status_code=500, json={"reason": "Internal Server Error"}
+            ),
         )
         with self.assertRaises(KubernetesHugePagesVolumesPatchError):
             self.kubernetes_volumes.list_volumes(
@@ -530,7 +551,9 @@ class TestKubernetesClient(unittest.TestCase):
     ):
         patch_get.side_effect = ApiError(
             request=httpx.Request(method="GET", url="http://whatever.com"),
-            response=httpx.Response(status_code=500, json={"reason": "Internal Server Error"}),
+            response=httpx.Response(
+                status_code=500, json={"reason": "Internal Server Error"}
+            ),
         )
         with self.assertRaises(KubernetesHugePagesVolumesPatchError):
             self.kubernetes_volumes.list_volumemounts(
@@ -539,8 +562,12 @@ class TestKubernetesClient(unittest.TestCase):
             )
 
     @patch("lightkube.core.client.Client.get")
-    def test_list_container_resources_returns_container_resource_requirements(self, patch_get):
-        expected_resource_requirements = ResourceRequirements(limits={"a-limit": "a-value"})
+    def test_list_container_resources_returns_container_resource_requirements(
+        self, patch_get
+    ):
+        expected_resource_requirements = ResourceRequirements(
+            limits={"a-limit": "a-value"}
+        )
         patch_get.return_value = StatefulSet(
             spec=StatefulSetSpec(
                 selector=LabelSelector(),
@@ -571,7 +598,9 @@ class TestKubernetesClient(unittest.TestCase):
     ):
         patch_get.side_effect = ApiError(
             request=httpx.Request(method="GET", url="http://whatever.com"),
-            response=httpx.Response(status_code=500, json={"reason": "Internal Server Error"}),
+            response=httpx.Response(
+                status_code=500, json={"reason": "Internal Server Error"}
+            ),
         )
         with self.assertRaises(KubernetesHugePagesVolumesPatchError):
             self.kubernetes_volumes.list_container_resources(
@@ -591,7 +620,7 @@ class K8sHugePagesVolumePatchChangedCharmEvents(CharmEvents):
 
 
 class _TestCharmNoVolumes(CharmBase):
-    on = K8sHugePagesVolumePatchChangedCharmEvents()
+    on = K8sHugePagesVolumePatchChangedCharmEvents()  # type: ignore
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -608,7 +637,7 @@ class _TestCharmNoVolumes(CharmBase):
 
 
 class _TestCharmAddVolumes(CharmBase):
-    on = K8sHugePagesVolumePatchChangedCharmEvents()
+    on = K8sHugePagesVolumePatchChangedCharmEvents()  # type: ignore
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -673,9 +702,14 @@ class TestKubernetesHugePagesPatchCharmLib(unittest.TestCase):
         patch_get,
     ):
         current_volumes = [
-            Volume(name="hugepages-1gi", emptyDir=EmptyDirVolumeSource(medium="HugePages-1Gi"))
+            Volume(
+                name="hugepages-1gi",
+                emptyDir=EmptyDirVolumeSource(medium="HugePages-1Gi"),
+            )
         ]
-        current_volumemounts = [VolumeMount(name="hugepages-1gi", mountPath="/dev/hugepages")]
+        current_volumemounts = [
+            VolumeMount(name="hugepages-1gi", mountPath="/dev/hugepages")
+        ]
         current_resources = ResourceRequirements(
             limits={"hugepages-1gi": "4Gi"},
             requests={"hugepages-1gi": "4Gi"},
@@ -720,7 +754,9 @@ class TestKubernetesHugePagesPatchCharmLib(unittest.TestCase):
             container_name=CONTAINER_NAME,
             requested_volumes=[],
             requested_volumemounts=[],
-            requested_resources=ResourceRequirements(claims=None, limits={}, requests={}),
+            requested_resources=ResourceRequirements(
+                claims=None, limits={}, requests={}
+            ),
         )
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
@@ -926,5 +962,10 @@ class TestKubernetesHugePagesPatchCharmLib(unittest.TestCase):
 
         self.assertEqual(
             generated_volumes,
-            [Volume(name="hugepages-1gi", emptyDir=EmptyDirVolumeSource(medium="HugePages-1Gi"))],
+            [
+                Volume(
+                    name="hugepages-1gi",
+                    emptyDir=EmptyDirVolumeSource(medium="HugePages-1Gi"),
+                )
+            ],
         )

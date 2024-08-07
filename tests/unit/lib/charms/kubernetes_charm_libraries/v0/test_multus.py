@@ -7,7 +7,7 @@ from unittest.mock import Mock, call, patch
 
 import httpx
 import pytest
-from charms.kubernetes_charm_libraries.v0.multus import (  # type: ignore[import]
+from charms.kubernetes_charm_libraries.v0.multus import (
     KubernetesClient,
     KubernetesMultusCharmLib,
     KubernetesMultusError,
@@ -44,7 +44,9 @@ class TestKubernetes(unittest.TestCase):
     def test_given_k8s_existing_nad_identical_to_new_one_when_nad_is_created_then_return_true(
         self, patch_get
     ):
-        existing_nad = NetworkAttachmentDefinition(metadata=ObjectMeta(name="whatever name"))
+        existing_nad = NetworkAttachmentDefinition(
+            metadata=ObjectMeta(name="whatever name")
+        )
         patch_get.return_value = existing_nad
 
         is_created = self.kubernetes_multus.network_attachment_definition_is_created(
@@ -94,7 +96,9 @@ class TestKubernetes(unittest.TestCase):
         nad_name = "whatever name"
         patch_get.side_effect = ApiError(
             request=httpx.Request(method="GET", url="http://whatever.com"),
-            response=httpx.Response(status_code=400, json={"reason": "whatever reason"}),
+            response=httpx.Response(
+                status_code=400, json={"reason": "whatever reason"}
+            ),
         )
 
         with pytest.raises(KubernetesMultusError) as e:
@@ -237,11 +241,20 @@ class TestKubernetes(unittest.TestCase):
         self.assertEqual(kwargs["res"], StatefulSetResource)
         self.assertEqual(kwargs["name"], statefulset_name)
         self.assertEqual(
-            kwargs["obj"].spec.template.metadata.annotations["k8s.v1.cni.cncf.io/networks"],
-            json.dumps([network_annotation.dict() for network_annotation in network_annotations]),
+            kwargs["obj"].spec.template.metadata.annotations[
+                "k8s.v1.cni.cncf.io/networks"
+            ],
+            json.dumps(
+                [
+                    network_annotation.dict()
+                    for network_annotation in network_annotations
+                ]
+            ),
         )
         self.assertEqual(
-            kwargs["obj"].spec.template.spec.containers[0].securityContext.capabilities.add,
+            kwargs["obj"]
+            .spec.template.spec.containers[0]
+            .securityContext.capabilities.add,
             ["NET_ADMIN"],
         )
         self.assertEqual(kwargs["patch_type"], PatchType.APPLY)
@@ -299,8 +312,15 @@ class TestKubernetes(unittest.TestCase):
 
         args, kwargs = patch_patch.call_args
         self.assertEqual(
-            kwargs["obj"].spec.template.metadata.annotations["k8s.v1.cni.cncf.io/networks"],
-            json.dumps([network_annotation.dict() for network_annotation in network_annotations]),
+            kwargs["obj"].spec.template.metadata.annotations[
+                "k8s.v1.cni.cncf.io/networks"
+            ],
+            json.dumps(
+                [
+                    network_annotation.dict()
+                    for network_annotation in network_annotations
+                ]
+            ),
         )
 
     @patch("lightkube.core.client.Client.get")
@@ -328,7 +348,9 @@ class TestKubernetes(unittest.TestCase):
         self.assertFalse(is_patched)
 
     @patch("lightkube.core.client.Client.get")
-    def test_given_no_annotations_when_statefulset_is_patched_then_returns_false(self, patch_get):
+    def test_given_no_annotations_when_statefulset_is_patched_then_returns_false(
+        self, patch_get
+    ):
         statefulset_name = "whatever name"
         network_annotations = [
             NetworkAnnotation(interface="whatever interface 1", name="whatever name 1"),
@@ -366,8 +388,12 @@ class TestKubernetes(unittest.TestCase):
             NetworkAnnotation(interface="whatever interface 2", name="whatever name 2"),
         ]
         network_annotations = [
-            NetworkAnnotation(interface="whatever new interface 1", name="whatever new name 1"),
-            NetworkAnnotation(interface="whatever new interface 2", name="whatever new name 2"),
+            NetworkAnnotation(
+                interface="whatever new interface 1", name="whatever new name 1"
+            ),
+            NetworkAnnotation(
+                interface="whatever new interface 2", name="whatever new name 2"
+            ),
         ]
         patch_get.return_value = StatefulSet(
             spec=StatefulSetSpec(
@@ -515,7 +541,9 @@ class TestKubernetes(unittest.TestCase):
         is_ready = self.kubernetes_multus.pod_is_ready(
             pod_name="pod name",
             network_annotations=[
-                NetworkAnnotation(interface="whatever interface 1", name="whatever name 1")
+                NetworkAnnotation(
+                    interface="whatever interface 1", name="whatever name 1"
+                )
             ],
             container_name="container-name",
             cap_net_admin=False,
@@ -525,13 +553,17 @@ class TestKubernetes(unittest.TestCase):
         self.assertFalse(is_ready)
 
     @patch("lightkube.core.client.Client.get")
-    def test_given_annotation_not_set_when_pod_is_ready_then_returns_false(self, patch_get):
+    def test_given_annotation_not_set_when_pod_is_ready_then_returns_false(
+        self, patch_get
+    ):
         patch_get.return_value = Pod(metadata=ObjectMeta(annotations={}))
 
         is_ready = self.kubernetes_multus.pod_is_ready(
             pod_name="pod name",
             network_annotations=[
-                NetworkAnnotation(interface="whatever interface 1", name="whatever name 1")
+                NetworkAnnotation(
+                    interface="whatever interface 1", name="whatever name 1"
+                )
             ],
             container_name="container-name",
             cap_net_admin=False,
@@ -541,7 +573,9 @@ class TestKubernetes(unittest.TestCase):
         self.assertFalse(is_ready)
 
     @patch("lightkube.core.client.Client.get")
-    def test_given_annotation_badly_set_when_pod_is_ready_then_returns_false(self, patch_get):
+    def test_given_annotation_badly_set_when_pod_is_ready_then_returns_false(
+        self, patch_get
+    ):
         existing_network_annotation = NetworkAnnotation(
             interface="whatever requested interface", name="whatever existing name"
         )
@@ -551,7 +585,9 @@ class TestKubernetes(unittest.TestCase):
         patch_get.return_value = Pod(
             metadata=ObjectMeta(
                 annotations={
-                    "k8s.v1.cni.cncf.io/networks": json.dumps([existing_network_annotation.dict()])
+                    "k8s.v1.cni.cncf.io/networks": json.dumps(
+                        [existing_network_annotation.dict()]
+                    )
                 }
             )
         )
@@ -567,7 +603,9 @@ class TestKubernetes(unittest.TestCase):
         self.assertFalse(is_ready)
 
     @patch("lightkube.core.client.Client.get")
-    def test_given_net_admin_not_set_when_pod_is_ready_then_returns_false(self, patch_get):
+    def test_given_net_admin_not_set_when_pod_is_ready_then_returns_false(
+        self, patch_get
+    ):
         network_annotation = NetworkAnnotation(
             interface="whatever requested interface", name="whatever existing name"
         )
@@ -575,14 +613,18 @@ class TestKubernetes(unittest.TestCase):
         patch_get.return_value = Pod(
             metadata=ObjectMeta(
                 annotations={
-                    "k8s.v1.cni.cncf.io/networks": json.dumps([network_annotation.dict()])
+                    "k8s.v1.cni.cncf.io/networks": json.dumps(
+                        [network_annotation.dict()]
+                    )
                 }
             ),
             spec=PodSpec(
                 containers=[
                     Container(
                         name=container_name,
-                        securityContext=SecurityContext(capabilities=Capabilities(add=[])),
+                        securityContext=SecurityContext(
+                            capabilities=Capabilities(add=[])
+                        ),
                     ),
                 ]
             ),
@@ -607,7 +649,9 @@ class TestKubernetes(unittest.TestCase):
         patch_get.return_value = Pod(
             metadata=ObjectMeta(
                 annotations={
-                    "k8s.v1.cni.cncf.io/networks": json.dumps([network_annotation.dict()])
+                    "k8s.v1.cni.cncf.io/networks": json.dumps(
+                        [network_annotation.dict()]
+                    )
                 }
             ),
             spec=PodSpec(
@@ -719,7 +763,7 @@ class KubernetesMultusCharmEvents(CharmEvents):
 
 
 class _TestCharmNoNAD(CharmBase):
-    on = KubernetesMultusCharmEvents()
+    on = KubernetesMultusCharmEvents()  # type: ignore
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -741,7 +785,7 @@ class _TestCharmNoNAD(CharmBase):
 
 
 class _TestCharmMultipleNAD(CharmBase):
-    on = KubernetesMultusCharmEvents()
+    on = KubernetesMultusCharmEvents()  # type: ignore
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -795,10 +839,14 @@ class _TestCharmMultipleNAD(CharmBase):
 
 class TestKubernetesMultusCharmLib(unittest.TestCase):
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions"
+    )
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition")
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition"
+    )
     def test_given_no_nad_to_create_and_no_existing_nad_when_nad_config_changed_then_create_is_not_called(  # noqa: E501
         self, patch_create_nad, patch_existing_nads
     ):
@@ -812,10 +860,14 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
         patch_create_nad.assert_not_called()
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions"
+    )
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition")
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition"
+    )
     def test_given_nads_already_exist_when_nad_config_changed_then_create_is_not_called(
         self,
         patch_create_nad,
@@ -846,10 +898,14 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
         patch_create_nad.assert_not_called()
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions"
+    )
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition")
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition"
+    )
     def test_given_nads_not_created_when_nad_config_changed_then_nad_create_is_called(
         self, patch_create_nad, patch_list_nads
     ):
@@ -878,10 +934,14 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
         )
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions"
+    )
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition")
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition"
+    )
     def test_given_nads_not_created_when_config_changed_then_nad_create_is_not_called(
         self, patch_create_nad, patch_list_nads
     ):
@@ -895,10 +955,14 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
         patch_create_nad.assert_not_called()
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions"
+    )
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition")
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition"
+    )
     def test_given_nads_exist_but_created_by_different_charm_when_nad_config_changed_then_nad_create_is_called(  # noqa: E501
         self, patch_create_nad, patch_list_nads
     ):
@@ -942,13 +1006,18 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
         )
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions"
+    )
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
     @patch(
-        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition", new=Mock
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition",
+        new=Mock,
     )
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_network_attachment_definition")
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_network_attachment_definition"
+    )
     def test_given_nads_exist_but_are_different_when_nad_config_changed_then_nad_delete_is_called(
         self, patch_delete_nad, patch_list_nads
     ):
@@ -982,13 +1051,18 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
         )
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions"
+    )
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
     @patch(
-        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition", new=Mock
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition",
+        new=Mock,
     )
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_network_attachment_definition")
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_network_attachment_definition"
+    )
     def test_given_nads_exist_but_are_different_when_config_changed_then_nad_delete_is_not_called(
         self, patch_delete_nad, patch_list_nads
     ):
@@ -1018,14 +1092,18 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_pod")
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions"
+    )
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
     @patch(
-        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition", new=Mock
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition",
+        new=Mock,
     )
     @patch(
-        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_network_attachment_definition", new=Mock
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_network_attachment_definition",
+        new=Mock,
     )
     def test_given_nads_exist_but_they_are_different_when_nad_config_changed_then_pod_delete_is_called_once(  # noqa: E501
         self, patch_list_nads, patch_delete_pod
@@ -1054,14 +1132,18 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_pod")
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions"
+    )
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
     @patch(
-        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition", new=Mock
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition",
+        new=Mock,
     )
     @patch(
-        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_network_attachment_definition", new=Mock
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_network_attachment_definition",
+        new=Mock,
     )
     def test_given_nads_exist_but_they_are_different_when_config_changed_then_pod_delete_is_not_called(  # noqa: E501
         self, patch_list_nads, patch_delete_pod
@@ -1090,14 +1172,18 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_pod")
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions"
+    )
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
     @patch(
-        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition", new=Mock
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition",
+        new=Mock,
     )
     @patch(
-        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_network_attachment_definition", new=Mock
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_network_attachment_definition",
+        new=Mock,
     )
     def test_given_nads_exist_but_are_same_when_nad_config_changed_then_pod_delete_is_not_called(
         self, patch_list_nads, patch_delete_pod
@@ -1133,10 +1219,14 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
         patch_delete_pod.assert_not_called()
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions"
+    )
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition")
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition"
+    )
     def test_given_nads_exist_but_are_different_when_nad_config_changed_then_nad_create_is_called(
         self, patch_create_nad, patch_list_nads
     ):
@@ -1180,11 +1270,14 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
         )
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions")
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions"
+    )
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset")
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched")
     @patch(
-        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition", new=Mock
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition",
+        new=Mock,
     )
     def test_given_nads_not_created_when_nad_config_changed_then_patch_statefulset_is_called(
         self, patch_is_statefulset_patched, patch_patch_statefulset, patch_list_nads
@@ -1201,10 +1294,12 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
             name=harness.charm.app.name,
             network_annotations=[
                 NetworkAnnotation(
-                    name=harness.charm.annotation_1_name, interface=harness.charm.nad_1_name
+                    name=harness.charm.annotation_1_name,
+                    interface=harness.charm.nad_1_name,
                 ),
                 NetworkAnnotation(
-                    name=harness.charm.annotation_2_name, interface=harness.charm.nad_2_name
+                    name=harness.charm.annotation_2_name,
+                    interface=harness.charm.nad_2_name,
                 ),
             ],
             container_name=harness.charm.container_name,
@@ -1214,7 +1309,9 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.unpatch_statefulset")
-    def test_given_when_removed_then_statefulset_unpatched(self, patch_unpatch_statefulset):
+    def test_given_when_removed_then_statefulset_unpatched(
+        self, patch_unpatch_statefulset
+    ):
         harness = Harness(_TestCharmMultipleNAD)
         self.addCleanup(harness.cleanup)
         harness.begin()
@@ -1223,8 +1320,12 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
         patch_unpatch_statefulset.assert_called()
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_network_attachment_definition")
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.network_attachment_definition_is_created")
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_network_attachment_definition"
+    )
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.network_attachment_definition_is_created"
+    )
     def test_given_nad_is_created_when_remove_then_network_attachment_definitions_are_deleted(
         self, patch_is_nad_created, patch_delete_network_attachment_definition
     ):
@@ -1243,8 +1344,12 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
         )
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_network_attachment_definition")
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.network_attachment_definition_is_created")
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_network_attachment_definition"
+    )
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.network_attachment_definition_is_created"
+    )
     def test_given_nad_is_not_created_when_remove_then_network_attachment_definitions_are_not_deleted(  # noqa: E501
         self, patch_is_nad_created, patch_delete_network_attachment_definition
     ):
@@ -1258,7 +1363,9 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
         patch_delete_network_attachment_definition.assert_not_called()
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_network_attachment_definition")
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_network_attachment_definition"
+    )
     @patch(
         f"{MULTUS_LIBRARY_PATH}.KubernetesClient.network_attachment_definition_is_created",
         new=Mock,
@@ -1277,7 +1384,9 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.pod_is_ready")
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched")
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.network_attachment_definition_is_created")
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.network_attachment_definition_is_created"
+    )
     def test_given_pod_not_ready_when_is_ready_then_return_false(
         self,
         patch_nad_is_created,
@@ -1298,7 +1407,9 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.pod_is_ready")
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched")
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.network_attachment_definition_is_created")
+    @patch(
+        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.network_attachment_definition_is_created"
+    )
     def test_given_pod_is_ready_when_is_ready_then_return_false(
         self,
         patch_nad_is_created,
