@@ -428,7 +428,7 @@ class KubernetesClient:
                 ]
             )
         )
-        container.securityContext.privileged = False
+        container.securityContext.privileged = False  # type: ignore[reportOptionalMemberAccess]
         statefulset_delta = StatefulSet(
             spec=StatefulSetSpec(
                 selector=statefulset.spec.selector,  # type: ignore[union-attr]
@@ -733,7 +733,7 @@ class KubernetesMultusCharmLib:
     def _pod_is_ready(self) -> bool:
         """Returns whether pod is ready with network annotations and capabilities."""
         return self.kubernetes.pod_is_ready(
-            pod_name=self._pod,
+            pod_name=self.pod_name,
             network_annotations=self.network_annotations,
             container_name=self.container_name,
             cap_net_admin=self.cap_net_admin,

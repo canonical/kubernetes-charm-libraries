@@ -27,9 +27,6 @@ from lightkube.models.meta_v1 import LabelSelector, ObjectMeta
 from lightkube.resources.apps_v1 import StatefulSet as StatefulSetResource
 from lightkube.resources.core_v1 import Pod
 from lightkube.types import PatchType
-from ops import EventBase, EventSource, Handle
-from ops.charm import CharmBase, CharmEvents
-from ops.testing import Harness
 
 MULTUS_LIBRARY_PATH = "charms.kubernetes_charm_libraries.v0.multus"
 
@@ -749,95 +746,7 @@ class TestKubernetes(unittest.TestCase):
         patch_delete.assert_called_with(Pod, pod_name, namespace=self.namespace)
 
 
-class NadConfigChangedEvent(EventBase):
-    """Event triggered when an existing network attachment definition is changed."""
-
-    def __init__(self, handle: Handle):
-        super().__init__(handle)
-
-
-class KubernetesMultusCharmEvents(CharmEvents):
-    """Kubernetes Multus Charm Events."""
-
-    nad_config_changed = EventSource(NadConfigChangedEvent)
-
-
-class _TestCharmNoNAD(CharmBase):
-    on = KubernetesMultusCharmEvents()  # type: ignore
-
-    def __init__(self, *args):
-        super().__init__(*args)
-        self.kubernetes_multus = KubernetesMultusCharmLib(
-            charm=self,
-            network_attachment_definitions_func=self.network_attachment_definitions_func,
-            network_annotations_func=self.network_annotations_func,
-            container_name="container-name",
-            refresh_event=self.on.nad_config_changed,
-        )
-
-    @staticmethod
-    def network_attachment_definitions_func() -> list[NetworkAttachmentDefinition]:
-        return []
-
-    @staticmethod
-    def network_annotations_func() -> list[NetworkAnnotation]:
-        return []
-
-
-class _TestCharmMultipleNAD(CharmBase):
-    on = KubernetesMultusCharmEvents()  # type: ignore
-
-    def __init__(self, *args):
-        super().__init__(*args)
-        self.container_name = "container-name"
-        self.nad_1_name = "nad-1"
-        self.nad_1_spec = {
-            "config": {
-                "cniVersion": "1.2.3",
-                "type": "macvlan",
-                "ipam": {"type": "static"},
-                "capabilities": {"mac": True},
-            }
-        }
-        self.nad_2_name = "nad-2"
-        self.nad_2_spec = {
-            "config": {
-                "cniVersion": "4.5.6",
-                "type": "pizza",
-                "ipam": {"type": "whatever"},
-                "capabilities": {"mac": True},
-            }
-        }
-        self.annotation_1_name = "eth0"
-        self.annotation_2_name = "eth1"
-        self.kubernetes_multus = KubernetesMultusCharmLib(
-            charm=self,
-            network_attachment_definitions_func=self.network_attachment_definitions_func,
-            network_annotations_func=self.network_annotations_func,
-            container_name=self.container_name,
-            refresh_event=self.on.nad_config_changed,
-        )
-
-    def network_attachment_definitions_func(self) -> list[NetworkAttachmentDefinition]:
-        return [
-            NetworkAttachmentDefinition(
-                metadata=ObjectMeta(name=self.nad_1_name),
-                spec=self.nad_1_spec,
-            ),
-            NetworkAttachmentDefinition(
-                metadata=ObjectMeta(name=self.nad_2_name),
-                spec=self.nad_2_spec,
-            ),
-        ]
-
-    def network_annotations_func(self) -> list[NetworkAnnotation]:
-        return [
-            NetworkAnnotation(interface=self.nad_1_name, name=self.annotation_1_name),
-            NetworkAnnotation(interface=self.nad_2_name, name=self.annotation_2_name),
-        ]
-
-
-class TestKubernetesMultusCharmLib(unittest.TestCase):
+class TestKubernetesMultusCharmLib:
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
     @patch(
         f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions"
@@ -851,11 +760,16 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
         self, patch_create_nad, patch_existing_nads
     ):
         patch_existing_nads.return_value = []
-        harness = Harness(_TestCharmNoNAD)
-        self.addCleanup(harness.cleanup)
-        harness.begin()
+        kubernetes_multus = KubernetesMultusCharmLib(
+            network_attachment_definitions=[],
+            network_annotations=[],
+            namespace="my-namespace",
+            statefulset_name="my-statefulset",
+            pod_name="my-pod",
+            container_name="container-name",
+        )
 
-        harness.charm.on.nad_config_changed.emit()
+        kubernetes_multus.configure()
 
         patch_create_nad.assert_not_called()
 
@@ -873,27 +787,64 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
         patch_create_nad,
         patch_list_nads,
     ):
-        harness = Harness(_TestCharmMultipleNAD)
-        self.addCleanup(harness.cleanup)
-        harness.begin()
+        nad_1_name = "nad-1"
+        nad_1_spec = {
+            "config": {
+                "cniVersion": "1.2.3",
+                "type": "macvlan",
+                "ipam": {"type": "static"},
+                "capabilities": {"mac": True},
+            }
+        }
+        nad_2_name = "nad-2"
+        nad_2_spec = {
+            "config": {
+                "cniVersion": "4.5.6",
+                "type": "pizza",
+                "ipam": {"type": "whatever"},
+                "capabilities": {"mac": True},
+            }
+        }
+        annotation_1_name = "eth0"
+        annotation_2_name = "eth1"
+        kubernetes_multus = KubernetesMultusCharmLib(
+            network_attachment_definitions=[
+                NetworkAttachmentDefinition(
+                    metadata=ObjectMeta(name=nad_1_name),
+                    spec=nad_1_spec,
+                ),
+                NetworkAttachmentDefinition(
+                    metadata=ObjectMeta(name=nad_2_name),
+                    spec=nad_2_spec,
+                ),
+            ],
+            network_annotations=[
+                NetworkAnnotation(interface=nad_1_name, name=annotation_1_name),
+                NetworkAnnotation(interface=nad_2_name, name=annotation_2_name),
+            ],
+            namespace="my-namespace",
+            statefulset_name="my-statefulset",
+            pod_name="my-pod",
+            container_name="container-name",
+        )
         patch_list_nads.return_value = [
             NetworkAttachmentDefinition(
                 metadata=ObjectMeta(
-                    name=harness.charm.nad_1_name,
-                    labels={"app.juju.is/created-by": harness.charm.app.name},
+                    name=nad_1_name,
+                    labels={"app.juju.is/created-by": "my-statefulset"},
                 ),
-                spec=harness.charm.nad_1_spec,
+                spec=nad_1_spec,
             ),
             NetworkAttachmentDefinition(
                 metadata=ObjectMeta(
-                    name=harness.charm.nad_2_name,
-                    labels={"app.juju.is/created-by": harness.charm.app.name},
+                    name=nad_2_name,
+                    labels={"app.juju.is/created-by": "my-statefulset"},
                 ),
-                spec=harness.charm.nad_2_spec,
+                spec=nad_2_spec,
             ),
         ]
 
-        harness.charm.on.nad_config_changed.emit()
+        kubernetes_multus.configure()
 
         patch_create_nad.assert_not_called()
 
@@ -910,24 +861,61 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
         self, patch_create_nad, patch_list_nads
     ):
         patch_list_nads.return_value = []
-        harness = Harness(_TestCharmMultipleNAD)
-        self.addCleanup(harness.cleanup)
-        harness.begin()
+        nad_1_name = "nad-1"
+        nad_1_spec = {
+            "config": {
+                "cniVersion": "1.2.3",
+                "type": "macvlan",
+                "ipam": {"type": "static"},
+                "capabilities": {"mac": True},
+            }
+        }
+        nad_2_name = "nad-2"
+        nad_2_spec = {
+            "config": {
+                "cniVersion": "4.5.6",
+                "type": "pizza",
+                "ipam": {"type": "whatever"},
+                "capabilities": {"mac": True},
+            }
+        }
+        annotation_1_name = "eth0"
+        annotation_2_name = "eth1"
+        kubernetes_multus = KubernetesMultusCharmLib(
+            network_attachment_definitions=[
+                NetworkAttachmentDefinition(
+                    metadata=ObjectMeta(name=nad_1_name),
+                    spec=nad_1_spec,
+                ),
+                NetworkAttachmentDefinition(
+                    metadata=ObjectMeta(name=nad_2_name),
+                    spec=nad_2_spec,
+                ),
+            ],
+            network_annotations=[
+                NetworkAnnotation(interface=nad_1_name, name=annotation_1_name),
+                NetworkAnnotation(interface=nad_2_name, name=annotation_2_name),
+            ],
+            namespace="my-namespace",
+            statefulset_name="my-statefulset",
+            pod_name="my-pod",
+            container_name="container-name",
+        )
 
-        harness.charm.on.nad_config_changed.emit()
+        kubernetes_multus.configure()
 
         patch_create_nad.assert_has_calls(
             calls=[
                 call(
                     network_attachment_definition=NetworkAttachmentDefinition(
-                        metadata=ObjectMeta(name=harness.charm.nad_1_name),
-                        spec=harness.charm.nad_1_spec,
+                        metadata=ObjectMeta(name=nad_1_name),
+                        spec=nad_1_spec,
                     )
                 ),
                 call(
                     network_attachment_definition=NetworkAttachmentDefinition(
-                        metadata=ObjectMeta(name=harness.charm.nad_2_name),
-                        spec=harness.charm.nad_2_spec,
+                        metadata=ObjectMeta(name=nad_2_name),
+                        spec=nad_2_spec,
                     )
                 ),
             ]
@@ -942,64 +930,80 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
     @patch(
         f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition"
     )
-    def test_given_nads_not_created_when_config_changed_then_nad_create_is_not_called(
-        self, patch_create_nad, patch_list_nads
-    ):
-        patch_list_nads.return_value = []
-        harness = Harness(_TestCharmMultipleNAD)
-        self.addCleanup(harness.cleanup)
-        harness.begin()
-
-        harness.charm.on.config_changed.emit()
-
-        patch_create_nad.assert_not_called()
-
-    @patch("lightkube.core.client.GenericSyncClient", new=Mock)
-    @patch(
-        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions"
-    )
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
-    @patch(
-        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition"
-    )
     def test_given_nads_exist_but_created_by_different_charm_when_nad_config_changed_then_nad_create_is_called(  # noqa: E501
         self, patch_create_nad, patch_list_nads
     ):
-        harness = Harness(_TestCharmMultipleNAD)
-        self.addCleanup(harness.cleanup)
-        harness.begin()
+        nad_1_name = "nad-1"
+        nad_1_spec = {
+            "config": {
+                "cniVersion": "1.2.3",
+                "type": "macvlan",
+                "ipam": {"type": "static"},
+                "capabilities": {"mac": True},
+            }
+        }
+        nad_2_name = "nad-2"
+        nad_2_spec = {
+            "config": {
+                "cniVersion": "4.5.6",
+                "type": "pizza",
+                "ipam": {"type": "whatever"},
+                "capabilities": {"mac": True},
+            }
+        }
+        annotation_1_name = "eth0"
+        annotation_2_name = "eth1"
+        kubernetes_multus = KubernetesMultusCharmLib(
+            network_attachment_definitions=[
+                NetworkAttachmentDefinition(
+                    metadata=ObjectMeta(name=nad_1_name),
+                    spec=nad_1_spec,
+                ),
+                NetworkAttachmentDefinition(
+                    metadata=ObjectMeta(name=nad_2_name),
+                    spec=nad_2_spec,
+                ),
+            ],
+            network_annotations=[
+                NetworkAnnotation(interface=nad_1_name, name=annotation_1_name),
+                NetworkAnnotation(interface=nad_2_name, name=annotation_2_name),
+            ],
+            namespace="my-namespace",
+            statefulset_name="my-statefulset",
+            pod_name="my-pod",
+            container_name="container-name",
+        )
         patch_list_nads.return_value = [
             NetworkAttachmentDefinition(
                 metadata=ObjectMeta(
-                    name=harness.charm.nad_1_name,
+                    name=nad_1_name,
                     labels={"app.juju.is/created-by": "different-app"},
                 ),
-                spec=harness.charm.nad_1_spec,
+                spec=nad_1_spec,
             ),
             NetworkAttachmentDefinition(
                 metadata=ObjectMeta(
-                    name=harness.charm.nad_2_name,
+                    name=nad_2_name,
                     labels={"app.juju.is/created-by": "different-app"},
                 ),
-                spec=harness.charm.nad_2_spec,
+                spec=nad_2_spec,
             ),
         ]
 
-        harness.charm.on.nad_config_changed.emit()
+        kubernetes_multus.configure()
 
         patch_create_nad.assert_has_calls(
             calls=[
                 call(
                     network_attachment_definition=NetworkAttachmentDefinition(
-                        metadata=ObjectMeta(name=harness.charm.nad_1_name),
-                        spec=harness.charm.nad_1_spec,
+                        metadata=ObjectMeta(name=nad_1_name),
+                        spec=nad_1_spec,
                     )
                 ),
                 call(
                     network_attachment_definition=NetworkAttachmentDefinition(
-                        metadata=ObjectMeta(name=harness.charm.nad_2_name),
-                        spec=harness.charm.nad_2_spec,
+                        metadata=ObjectMeta(name=nad_2_name),
+                        spec=nad_2_spec,
                     )
                 ),
             ]
@@ -1021,74 +1025,71 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
     def test_given_nads_exist_but_are_different_when_nad_config_changed_then_nad_delete_is_called(
         self, patch_delete_nad, patch_list_nads
     ):
-        harness = Harness(_TestCharmMultipleNAD)
-        self.addCleanup(harness.cleanup)
-        harness.begin()
+        nad_1_name = "nad-1"
+        nad_1_spec = {
+            "config": {
+                "cniVersion": "1.2.3",
+                "type": "macvlan",
+                "ipam": {"type": "static"},
+                "capabilities": {"mac": True},
+            }
+        }
+        nad_2_name = "nad-2"
+        nad_2_spec = {
+            "config": {
+                "cniVersion": "4.5.6",
+                "type": "pizza",
+                "ipam": {"type": "whatever"},
+                "capabilities": {"mac": True},
+            }
+        }
+        annotation_1_name = "eth0"
+        annotation_2_name = "eth1"
+        kubernetes_multus = KubernetesMultusCharmLib(
+            network_attachment_definitions=[
+                NetworkAttachmentDefinition(
+                    metadata=ObjectMeta(name=nad_1_name),
+                    spec=nad_1_spec,
+                ),
+                NetworkAttachmentDefinition(
+                    metadata=ObjectMeta(name=nad_2_name),
+                    spec=nad_2_spec,
+                ),
+            ],
+            network_annotations=[
+                NetworkAnnotation(interface=nad_1_name, name=annotation_1_name),
+                NetworkAnnotation(interface=nad_2_name, name=annotation_2_name),
+            ],
+            namespace="my-namespace",
+            statefulset_name="my-statefulset",
+            pod_name="my-pod",
+            container_name="container-name",
+        )
         patch_list_nads.return_value = [
             NetworkAttachmentDefinition(
                 metadata=ObjectMeta(
-                    name=harness.charm.nad_1_name,
-                    labels={"app.juju.is/created-by": harness.charm.app.name},
+                    name=nad_1_name,
+                    labels={"app.juju.is/created-by": "my-statefulset"},
                 ),
                 spec={"different": "spec"},
             ),
             NetworkAttachmentDefinition(
                 metadata=ObjectMeta(
-                    name=harness.charm.nad_2_name,
-                    labels={"app.juju.is/created-by": harness.charm.app.name},
+                    name=nad_2_name,
+                    labels={"app.juju.is/created-by": "my-statefulset"},
                 ),
                 spec={"different": "spec"},
             ),
         ]
 
-        harness.charm.on.nad_config_changed.emit()
+        kubernetes_multus.configure()
 
         patch_delete_nad.assert_has_calls(
             calls=[
-                call(name=harness.charm.nad_1_name),
-                call(name=harness.charm.nad_2_name),
+                call(name=nad_1_name),
+                call(name=nad_2_name),
             ]
         )
-
-    @patch("lightkube.core.client.GenericSyncClient", new=Mock)
-    @patch(
-        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions"
-    )
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
-    @patch(
-        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition",
-        new=Mock,
-    )
-    @patch(
-        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_network_attachment_definition"
-    )
-    def test_given_nads_exist_but_are_different_when_config_changed_then_nad_delete_is_not_called(
-        self, patch_delete_nad, patch_list_nads
-    ):
-        harness = Harness(_TestCharmMultipleNAD)
-        self.addCleanup(harness.cleanup)
-        harness.begin()
-        patch_list_nads.return_value = [
-            NetworkAttachmentDefinition(
-                metadata=ObjectMeta(
-                    name=harness.charm.nad_1_name,
-                    labels={"app.juju.is/created-by": harness.charm.app.name},
-                ),
-                spec={"different": "spec"},
-            ),
-            NetworkAttachmentDefinition(
-                metadata=ObjectMeta(
-                    name=harness.charm.nad_2_name,
-                    labels={"app.juju.is/created-by": harness.charm.app.name},
-                ),
-                spec={"different": "spec"},
-            ),
-        ]
-
-        harness.charm.on.config_changed.emit()
-
-        patch_delete_nad.assert_not_called()
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_pod")
@@ -1108,67 +1109,66 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
     def test_given_nads_exist_but_they_are_different_when_nad_config_changed_then_pod_delete_is_called_once(  # noqa: E501
         self, patch_list_nads, patch_delete_pod
     ):
-        harness = Harness(_TestCharmMultipleNAD)
-        self.addCleanup(harness.cleanup)
-        harness.begin()
+        nad_1_name = "nad-1"
+        nad_1_spec = {
+            "config": {
+                "cniVersion": "1.2.3",
+                "type": "macvlan",
+                "ipam": {"type": "static"},
+                "capabilities": {"mac": True},
+            }
+        }
+        nad_2_name = "nad-2"
+        nad_2_spec = {
+            "config": {
+                "cniVersion": "4.5.6",
+                "type": "pizza",
+                "ipam": {"type": "whatever"},
+                "capabilities": {"mac": True},
+            }
+        }
+        annotation_1_name = "eth0"
+        annotation_2_name = "eth1"
+        kubernetes_multus = KubernetesMultusCharmLib(
+            network_attachment_definitions=[
+                NetworkAttachmentDefinition(
+                    metadata=ObjectMeta(name=nad_1_name),
+                    spec=nad_1_spec,
+                ),
+                NetworkAttachmentDefinition(
+                    metadata=ObjectMeta(name=nad_2_name),
+                    spec=nad_2_spec,
+                ),
+            ],
+            network_annotations=[
+                NetworkAnnotation(interface=nad_1_name, name=annotation_1_name),
+                NetworkAnnotation(interface=nad_2_name, name=annotation_2_name),
+            ],
+            namespace="my-namespace",
+            statefulset_name="my-statefulset",
+            pod_name="my-pod",
+            container_name="container-name",
+        )
         patch_list_nads.return_value = [
             NetworkAttachmentDefinition(
                 metadata=ObjectMeta(
-                    name=harness.charm.nad_1_name,
-                    labels={"app.juju.is/created-by": harness.charm.app.name},
+                    name=nad_1_name,
+                    labels={"app.juju.is/created-by": "my-statefulset"},
                 ),
                 spec={"different": "spec"},
             ),
             NetworkAttachmentDefinition(
                 metadata=ObjectMeta(
-                    name=harness.charm.nad_2_name,
-                    labels={"app.juju.is/created-by": harness.charm.app.name},
+                    name=nad_2_name,
+                    labels={"app.juju.is/created-by": "my-statefulset"},
                 ),
                 spec={"different": "spec"},
             ),
         ]
-        harness.charm.on.nad_config_changed.emit()
-        patch_delete_pod.assert_called_once()
 
-    @patch("lightkube.core.client.GenericSyncClient", new=Mock)
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_pod")
-    @patch(
-        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.list_network_attachment_definitions"
-    )
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.patch_statefulset", new=Mock)
-    @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched", new=Mock)
-    @patch(
-        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.create_network_attachment_definition",
-        new=Mock,
-    )
-    @patch(
-        f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_network_attachment_definition",
-        new=Mock,
-    )
-    def test_given_nads_exist_but_they_are_different_when_config_changed_then_pod_delete_is_not_called(  # noqa: E501
-        self, patch_list_nads, patch_delete_pod
-    ):
-        harness = Harness(_TestCharmMultipleNAD)
-        self.addCleanup(harness.cleanup)
-        harness.begin()
-        patch_list_nads.return_value = [
-            NetworkAttachmentDefinition(
-                metadata=ObjectMeta(
-                    name=harness.charm.nad_1_name,
-                    labels={"app.juju.is/created-by": harness.charm.app.name},
-                ),
-                spec={"different": "spec"},
-            ),
-            NetworkAttachmentDefinition(
-                metadata=ObjectMeta(
-                    name=harness.charm.nad_2_name,
-                    labels={"app.juju.is/created-by": harness.charm.app.name},
-                ),
-                spec={"different": "spec"},
-            ),
-        ]
-        harness.charm.on.config_changed.emit()
-        patch_delete_pod.assert_not_called()
+        kubernetes_multus.configure()
+
+        patch_delete_pod.assert_called_once()
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_pod")
@@ -1188,9 +1188,46 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
     def test_given_nads_exist_but_are_same_when_nad_config_changed_then_pod_delete_is_not_called(
         self, patch_list_nads, patch_delete_pod
     ):
-        harness = Harness(_TestCharmMultipleNAD)
-        self.addCleanup(harness.cleanup)
-        harness.begin()
+        nad_1_name = "nad-1"
+        nad_1_spec = {
+            "config": {
+                "cniVersion": "1.2.3",
+                "type": "macvlan",
+                "ipam": {"type": "static"},
+                "capabilities": {"mac": True},
+            }
+        }
+        nad_2_name = "nad-2"
+        nad_2_spec = {
+            "config": {
+                "cniVersion": "4.5.6",
+                "type": "pizza",
+                "ipam": {"type": "whatever"},
+                "capabilities": {"mac": True},
+            }
+        }
+        annotation_1_name = "eth0"
+        annotation_2_name = "eth1"
+        kubernetes_multus = KubernetesMultusCharmLib(
+            network_attachment_definitions=[
+                NetworkAttachmentDefinition(
+                    metadata=ObjectMeta(name=nad_1_name),
+                    spec=nad_1_spec,
+                ),
+                NetworkAttachmentDefinition(
+                    metadata=ObjectMeta(name=nad_2_name),
+                    spec=nad_2_spec,
+                ),
+            ],
+            network_annotations=[
+                NetworkAnnotation(interface=nad_1_name, name=annotation_1_name),
+                NetworkAnnotation(interface=nad_2_name, name=annotation_2_name),
+            ],
+            namespace="my-namespace",
+            statefulset_name="my-statefulset",
+            pod_name="my-pod",
+            container_name="container-name",
+        )
         patch_list_nads.return_value = [
             NetworkAttachmentDefinition(
                 metadata=ObjectMeta(name="nad-1"),
@@ -1215,7 +1252,9 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
                 },
             ),
         ]
-        harness.charm.on.nad_config_changed.emit()
+
+        kubernetes_multus.configure()
+
         patch_delete_pod.assert_not_called()
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
@@ -1230,40 +1269,77 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
     def test_given_nads_exist_but_are_different_when_nad_config_changed_then_nad_create_is_called(
         self, patch_create_nad, patch_list_nads
     ):
-        harness = Harness(_TestCharmMultipleNAD)
-        self.addCleanup(harness.cleanup)
-        harness.begin()
+        nad_1_name = "nad-1"
+        nad_1_spec = {
+            "config": {
+                "cniVersion": "1.2.3",
+                "type": "macvlan",
+                "ipam": {"type": "static"},
+                "capabilities": {"mac": True},
+            }
+        }
+        nad_2_name = "nad-2"
+        nad_2_spec = {
+            "config": {
+                "cniVersion": "4.5.6",
+                "type": "pizza",
+                "ipam": {"type": "whatever"},
+                "capabilities": {"mac": True},
+            }
+        }
+        annotation_1_name = "eth0"
+        annotation_2_name = "eth1"
+        kubernetes_multus = KubernetesMultusCharmLib(
+            network_attachment_definitions=[
+                NetworkAttachmentDefinition(
+                    metadata=ObjectMeta(name=nad_1_name),
+                    spec=nad_1_spec,
+                ),
+                NetworkAttachmentDefinition(
+                    metadata=ObjectMeta(name=nad_2_name),
+                    spec=nad_2_spec,
+                ),
+            ],
+            network_annotations=[
+                NetworkAnnotation(interface=nad_1_name, name=annotation_1_name),
+                NetworkAnnotation(interface=nad_2_name, name=annotation_2_name),
+            ],
+            namespace="my-namespace",
+            statefulset_name="my-statefulset",
+            pod_name="my-pod",
+            container_name="container-name",
+        )
         patch_list_nads.return_value = [
             NetworkAttachmentDefinition(
                 metadata=ObjectMeta(
-                    name=harness.charm.nad_1_name,
-                    labels={"app.juju.is/created-by": harness.charm.app.name},
+                    name=nad_1_name,
+                    labels={"app.juju.is/created-by": "my-statefulset"},
                 ),
                 spec={"different": "spec"},
             ),
             NetworkAttachmentDefinition(
                 metadata=ObjectMeta(
-                    name=harness.charm.nad_2_name,
-                    labels={"app.juju.is/created-by": harness.charm.app.name},
+                    name=nad_2_name,
+                    labels={"app.juju.is/created-by": "my-statefulset"},
                 ),
                 spec={"different": "spec"},
             ),
         ]
 
-        harness.charm.on.nad_config_changed.emit()
+        kubernetes_multus.configure()
 
         patch_create_nad.assert_has_calls(
             calls=[
                 call(
                     network_attachment_definition=NetworkAttachmentDefinition(
-                        metadata=ObjectMeta(name=harness.charm.nad_1_name),
-                        spec=harness.charm.nad_1_spec,
+                        metadata=ObjectMeta(name=nad_1_name),
+                        spec=nad_1_spec,
                     )
                 ),
                 call(
                     network_attachment_definition=NetworkAttachmentDefinition(
-                        metadata=ObjectMeta(name=harness.charm.nad_2_name),
-                        spec=harness.charm.nad_2_spec,
+                        metadata=ObjectMeta(name=nad_2_name),
+                        spec=nad_2_spec,
                     )
                 ),
             ]
@@ -1283,26 +1359,63 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
         self, patch_is_statefulset_patched, patch_patch_statefulset, patch_list_nads
     ):
         patch_list_nads.return_value = []
-        harness = Harness(_TestCharmMultipleNAD)
-        self.addCleanup(harness.cleanup)
-        harness.begin()
-        patch_is_statefulset_patched.return_value = False
-
-        harness.charm.on.nad_config_changed.emit()
-
-        patch_patch_statefulset.assert_called_with(
-            name=harness.charm.app.name,
-            network_annotations=[
-                NetworkAnnotation(
-                    name=harness.charm.annotation_1_name,
-                    interface=harness.charm.nad_1_name,
+        nad_1_name = "nad-1"
+        nad_1_spec = {
+            "config": {
+                "cniVersion": "1.2.3",
+                "type": "macvlan",
+                "ipam": {"type": "static"},
+                "capabilities": {"mac": True},
+            }
+        }
+        nad_2_name = "nad-2"
+        nad_2_spec = {
+            "config": {
+                "cniVersion": "4.5.6",
+                "type": "pizza",
+                "ipam": {"type": "whatever"},
+                "capabilities": {"mac": True},
+            }
+        }
+        annotation_1_name = "eth0"
+        annotation_2_name = "eth1"
+        kubernetes_multus = KubernetesMultusCharmLib(
+            network_attachment_definitions=[
+                NetworkAttachmentDefinition(
+                    metadata=ObjectMeta(name=nad_1_name),
+                    spec=nad_1_spec,
                 ),
-                NetworkAnnotation(
-                    name=harness.charm.annotation_2_name,
-                    interface=harness.charm.nad_2_name,
+                NetworkAttachmentDefinition(
+                    metadata=ObjectMeta(name=nad_2_name),
+                    spec=nad_2_spec,
                 ),
             ],
-            container_name=harness.charm.container_name,
+            network_annotations=[
+                NetworkAnnotation(interface=nad_1_name, name=annotation_1_name),
+                NetworkAnnotation(interface=nad_2_name, name=annotation_2_name),
+            ],
+            namespace="my-namespace",
+            statefulset_name="my-statefulset",
+            pod_name="my-pod",
+            container_name="container-name",
+        )
+        patch_is_statefulset_patched.return_value = False
+
+        kubernetes_multus.configure()
+
+        patch_patch_statefulset.assert_called_with(
+            name="my-statefulset",
+            network_annotations=[
+                NetworkAnnotation(
+                    name=annotation_1_name,
+                    interface=nad_1_name,
+                ),
+                NetworkAnnotation(
+                    name=annotation_2_name,
+                    interface=nad_2_name,
+                ),
+            ],
+            container_name="container-name",
             cap_net_admin=False,
             privileged=False,
         )
@@ -1312,10 +1425,48 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
     def test_given_when_removed_then_statefulset_unpatched(
         self, patch_unpatch_statefulset
     ):
-        harness = Harness(_TestCharmMultipleNAD)
-        self.addCleanup(harness.cleanup)
-        harness.begin()
-        harness.charm.on.remove.emit()
+        nad_1_name = "nad-1"
+        nad_1_spec = {
+            "config": {
+                "cniVersion": "1.2.3",
+                "type": "macvlan",
+                "ipam": {"type": "static"},
+                "capabilities": {"mac": True},
+            }
+        }
+        nad_2_name = "nad-2"
+        nad_2_spec = {
+            "config": {
+                "cniVersion": "4.5.6",
+                "type": "pizza",
+                "ipam": {"type": "whatever"},
+                "capabilities": {"mac": True},
+            }
+        }
+        annotation_1_name = "eth0"
+        annotation_2_name = "eth1"
+        kubernetes_multus = KubernetesMultusCharmLib(
+            network_attachment_definitions=[
+                NetworkAttachmentDefinition(
+                    metadata=ObjectMeta(name=nad_1_name),
+                    spec=nad_1_spec,
+                ),
+                NetworkAttachmentDefinition(
+                    metadata=ObjectMeta(name=nad_2_name),
+                    spec=nad_2_spec,
+                ),
+            ],
+            network_annotations=[
+                NetworkAnnotation(interface=nad_1_name, name=annotation_1_name),
+                NetworkAnnotation(interface=nad_2_name, name=annotation_2_name),
+            ],
+            namespace="my-namespace",
+            statefulset_name="my-statefulset",
+            pod_name="my-pod",
+            container_name="container-name",
+        )
+
+        kubernetes_multus.remove()
 
         patch_unpatch_statefulset.assert_called()
 
@@ -1329,17 +1480,54 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
     def test_given_nad_is_created_when_remove_then_network_attachment_definitions_are_deleted(
         self, patch_is_nad_created, patch_delete_network_attachment_definition
     ):
-        harness = Harness(_TestCharmMultipleNAD)
-        self.addCleanup(harness.cleanup)
-        harness.begin()
+        nad_1_name = "nad-1"
+        nad_1_spec = {
+            "config": {
+                "cniVersion": "1.2.3",
+                "type": "macvlan",
+                "ipam": {"type": "static"},
+                "capabilities": {"mac": True},
+            }
+        }
+        nad_2_name = "nad-2"
+        nad_2_spec = {
+            "config": {
+                "cniVersion": "4.5.6",
+                "type": "pizza",
+                "ipam": {"type": "whatever"},
+                "capabilities": {"mac": True},
+            }
+        }
+        annotation_1_name = "eth0"
+        annotation_2_name = "eth1"
+        kubernetes_multus = KubernetesMultusCharmLib(
+            network_attachment_definitions=[
+                NetworkAttachmentDefinition(
+                    metadata=ObjectMeta(name=nad_1_name),
+                    spec=nad_1_spec,
+                ),
+                NetworkAttachmentDefinition(
+                    metadata=ObjectMeta(name=nad_2_name),
+                    spec=nad_2_spec,
+                ),
+            ],
+            network_annotations=[
+                NetworkAnnotation(interface=nad_1_name, name=annotation_1_name),
+                NetworkAnnotation(interface=nad_2_name, name=annotation_2_name),
+            ],
+            namespace="my-namespace",
+            statefulset_name="my-statefulset",
+            pod_name="my-pod",
+            container_name="container-name",
+        )
         patch_is_nad_created.return_value = True
 
-        harness.charm.on.remove.emit()
+        kubernetes_multus.remove()
 
         patch_delete_network_attachment_definition.assert_has_calls(
             calls=[
-                call(name=harness.charm.nad_1_name),
-                call(name=harness.charm.nad_2_name),
+                call(name=nad_1_name),
+                call(name=nad_2_name),
             ]
         )
 
@@ -1353,12 +1541,49 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
     def test_given_nad_is_not_created_when_remove_then_network_attachment_definitions_are_not_deleted(  # noqa: E501
         self, patch_is_nad_created, patch_delete_network_attachment_definition
     ):
-        harness = Harness(_TestCharmMultipleNAD)
-        self.addCleanup(harness.cleanup)
-        harness.begin()
+        nad_1_name = "nad-1"
+        nad_1_spec = {
+            "config": {
+                "cniVersion": "1.2.3",
+                "type": "macvlan",
+                "ipam": {"type": "static"},
+                "capabilities": {"mac": True},
+            }
+        }
+        nad_2_name = "nad-2"
+        nad_2_spec = {
+            "config": {
+                "cniVersion": "4.5.6",
+                "type": "pizza",
+                "ipam": {"type": "whatever"},
+                "capabilities": {"mac": True},
+            }
+        }
+        annotation_1_name = "eth0"
+        annotation_2_name = "eth1"
+        kubernetes_multus = KubernetesMultusCharmLib(
+            network_attachment_definitions=[
+                NetworkAttachmentDefinition(
+                    metadata=ObjectMeta(name=nad_1_name),
+                    spec=nad_1_spec,
+                ),
+                NetworkAttachmentDefinition(
+                    metadata=ObjectMeta(name=nad_2_name),
+                    spec=nad_2_spec,
+                ),
+            ],
+            network_annotations=[
+                NetworkAnnotation(interface=nad_1_name, name=annotation_1_name),
+                NetworkAnnotation(interface=nad_2_name, name=annotation_2_name),
+            ],
+            namespace="my-namespace",
+            statefulset_name="my-statefulset",
+            pod_name="my-pod",
+            container_name="container-name",
+        )
         patch_is_nad_created.return_value = False
 
-        harness.charm.on.remove.emit()
+        kubernetes_multus.remove()
 
         patch_delete_network_attachment_definition.assert_not_called()
 
@@ -1373,11 +1598,16 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
     def test_given_no_nad_when_remove_then_network_attachment_definitions_are_not_deleted(
         self, patch_delete_network_attachment_definition
     ):
-        harness = Harness(_TestCharmNoNAD)
-        self.addCleanup(harness.cleanup)
-        harness.begin()
+        kubernetes_multus = KubernetesMultusCharmLib(
+            network_attachment_definitions=[],
+            network_annotations=[],
+            namespace="my-namespace",
+            statefulset_name="my-statefulset",
+            pod_name="my-pod",
+            container_name="container-name",
+        )
 
-        harness.charm.on.remove.emit()
+        kubernetes_multus.remove()
 
         patch_delete_network_attachment_definition.assert_not_called()
 
@@ -1396,13 +1626,50 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
         patch_nad_is_created.return_value = True
         patch_statefulest_is_patched.return_value = True
         patch_pod_is_ready.return_value = False
+        nad_1_name = "nad-1"
+        nad_1_spec = {
+            "config": {
+                "cniVersion": "1.2.3",
+                "type": "macvlan",
+                "ipam": {"type": "static"},
+                "capabilities": {"mac": True},
+            }
+        }
+        nad_2_name = "nad-2"
+        nad_2_spec = {
+            "config": {
+                "cniVersion": "4.5.6",
+                "type": "pizza",
+                "ipam": {"type": "whatever"},
+                "capabilities": {"mac": True},
+            }
+        }
+        annotation_1_name = "eth0"
+        annotation_2_name = "eth1"
+        kubernetes_multus = KubernetesMultusCharmLib(
+            network_attachment_definitions=[
+                NetworkAttachmentDefinition(
+                    metadata=ObjectMeta(name=nad_1_name),
+                    spec=nad_1_spec,
+                ),
+                NetworkAttachmentDefinition(
+                    metadata=ObjectMeta(name=nad_2_name),
+                    spec=nad_2_spec,
+                ),
+            ],
+            network_annotations=[
+                NetworkAnnotation(interface=nad_1_name, name=annotation_1_name),
+                NetworkAnnotation(interface=nad_2_name, name=annotation_2_name),
+            ],
+            namespace="my-namespace",
+            statefulset_name="my-statefulset",
+            pod_name="my-pod",
+            container_name="container-name",
+        )
 
-        harness = Harness(_TestCharmMultipleNAD)
-        self.addCleanup(harness.cleanup)
-        harness.begin()
+        is_ready = kubernetes_multus.is_ready()
 
-        is_ready = harness.charm.kubernetes_multus.is_ready()
-        self.assertFalse(is_ready)
+        assert not is_ready
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.pod_is_ready")
@@ -1420,20 +1687,65 @@ class TestKubernetesMultusCharmLib(unittest.TestCase):
         patch_statefulest_is_patched.return_value = True
         patch_pod_is_ready.return_value = True
 
-        harness = Harness(_TestCharmMultipleNAD)
-        self.addCleanup(harness.cleanup)
-        harness.begin()
+        nad_1_name = "nad-1"
+        nad_1_spec = {
+            "config": {
+                "cniVersion": "1.2.3",
+                "type": "macvlan",
+                "ipam": {"type": "static"},
+                "capabilities": {"mac": True},
+            }
+        }
+        nad_2_name = "nad-2"
+        nad_2_spec = {
+            "config": {
+                "cniVersion": "4.5.6",
+                "type": "pizza",
+                "ipam": {"type": "whatever"},
+                "capabilities": {"mac": True},
+            }
+        }
+        annotation_1_name = "eth0"
+        annotation_2_name = "eth1"
+        kubernetes_multus = KubernetesMultusCharmLib(
+            network_attachment_definitions=[
+                NetworkAttachmentDefinition(
+                    metadata=ObjectMeta(name=nad_1_name),
+                    spec=nad_1_spec,
+                ),
+                NetworkAttachmentDefinition(
+                    metadata=ObjectMeta(name=nad_2_name),
+                    spec=nad_2_spec,
+                ),
+            ],
+            network_annotations=[
+                NetworkAnnotation(interface=nad_1_name, name=annotation_1_name),
+                NetworkAnnotation(interface=nad_2_name, name=annotation_2_name),
+            ],
+            namespace="my-namespace",
+            statefulset_name="my-statefulset",
+            pod_name="my-pod",
+            container_name="container-name",
+        )
 
-        is_ready = harness.charm.kubernetes_multus.is_ready()
-        self.assertTrue(is_ready)
+        is_ready = kubernetes_multus.is_ready()
+
+        assert is_ready
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
     @patch(f"{MULTUS_LIBRARY_PATH}.KubernetesClient.delete_pod")
     def test_given_pod_is_deleted_when_multus_delete_pod_then_k8s_client_delete_pod_is_called(
         self, patch_delete
-    ):  # noqa: E501
-        harness = Harness(_TestCharmNoNAD)
-        self.addCleanup(harness.cleanup)
-        harness.begin()
-        harness.charm.kubernetes_multus.delete_pod()
+    ):
+        kubernetes_multus = KubernetesMultusCharmLib(
+            network_attachment_definitions=[],
+            network_annotations=[],
+            namespace="my-namespace",
+            statefulset_name="my-statefulset",
+            pod_name="my-pod",
+            container_name="container-name",
+        )
+
+        kubernetes_multus.delete_pod()
+
         patch_delete.assert_called_once()
