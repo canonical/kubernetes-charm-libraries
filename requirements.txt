@@ -20,13 +20,13 @@ idna==3.7
     # via
     #   anyio
     #   httpx
-lightkube==0.15.3
+lightkube==0.15.4
     # via -r requirements.in
 lightkube-models==1.30.0.8
     # via
     #   -r requirements.in
     #   lightkube
-ops==2.15.0
+ops==2.16.1
     # via -r requirements.in
 pyyaml==6.0.1
     # via
