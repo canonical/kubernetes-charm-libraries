@@ -24,9 +24,7 @@ from lightkube.models.core_v1 import (
 )
 from lightkube.models.meta_v1 import LabelSelector
 from lightkube.resources.core_v1 import Pod
-from ops import EventBase, EventSource
-from ops.charm import CharmBase, CharmEvents
-from ops.testing import Harness
+
 
 VOLUMES_LIBRARY_PATH = "charms.kubernetes_charm_libraries.v0.hugepages_volumes_patch"
 
@@ -609,57 +607,7 @@ class TestKubernetesClient(unittest.TestCase):
             )
 
 
-class K8sHugePagesVolumePatchChangedEvent(EventBase):
-    """Charm Event triggered when a K8S HugePages volume is changed."""
-
-
-class K8sHugePagesVolumePatchChangedCharmEvents(CharmEvents):
-    """K8S hugepages config changed events."""
-
-    hugepages_volumes_config_changed = EventSource(K8sHugePagesVolumePatchChangedEvent)
-
-
-class _TestCharmNoVolumes(CharmBase):
-    on = K8sHugePagesVolumePatchChangedCharmEvents()  # type: ignore
-
-    def __init__(self, *args):
-        super().__init__(*args)
-        self.kubernetes_volumes = KubernetesHugePagesPatchCharmLib(
-            charm=self,
-            hugepages_volumes_func=self._volumes_func,
-            container_name=CONTAINER_NAME,
-            refresh_event=self.on.hugepages_volumes_config_changed,
-        )
-
-    @staticmethod
-    def _volumes_func() -> list[HugePagesVolume]:
-        return []
-
-
-class _TestCharmAddVolumes(CharmBase):
-    on = K8sHugePagesVolumePatchChangedCharmEvents()  # type: ignore
-
-    def __init__(self, *args):
-        super().__init__(*args)
-        self.kubernetes_volumes = KubernetesHugePagesPatchCharmLib(
-            charm=self,
-            hugepages_volumes_func=self._volumes_func,
-            container_name=CONTAINER_NAME,
-            refresh_event=self.on.hugepages_volumes_config_changed,
-        )
-
-    @staticmethod
-    def _volumes_func() -> list[HugePagesVolume]:
-        return [
-            HugePagesVolume(
-                mount_path="/dev/hugepages",
-                size="1Gi",
-                limit="4Gi",
-            )
-        ]
-
-
-class TestKubernetesHugePagesPatchCharmLib(unittest.TestCase):
+class TestKubernetesHugePagesPatchCharmLib:
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
     @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.list_volumes")
     @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.list_volumemounts")
@@ -667,7 +615,7 @@ class TestKubernetesHugePagesPatchCharmLib(unittest.TestCase):
     @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.pod_is_patched")
     @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.statefulset_is_patched")
     @patch(f"{VOLUMES_LIBRARY_PATH}.KubernetesClient.replace_statefulset")
-    def test_given_no_hugepages_and_no_existing_hugepages_when_hugepages_config_changed_then_replace_is_not_called(  # noqa: E501
+    def test_given_no_hugepages_and_no_existing_hugepages_when_configure_then_replace_is_not_called(  # noqa: E501
         self,
         patch_replace_statefulset,
         patch_statefulset_is_patched,
@@ -681,11 +629,16 @@ class TestKubernetesHugePagesPatchCharmLib(unittest.TestCase):
         patch_list_container_resources.return_value = ResourceRequirements()
         patch_pod_is_patched.return_value = True
         patch_statefulset_is_patched.return_value = True
-        harness = Harness(_TestCharmNoVolumes)
-        self.addCleanup(harness.cleanup)
-        harness.begin()
 
-        harness.charm.on.hugepages_volumes_config_changed.emit()
+        kubernetes_volumes = KubernetesHugePagesPatchCharmLib(
+            namespace="whatever-ns",
+            statefulset_name=STATEFULSET_NAME,
+            pod_name="whatever-pod",
+            container_name=CONTAINER_NAME,
+            hugepages_volumes=[],
+        )
+
+        kubernetes_volumes.configure()
 
         patch_replace_statefulset.assert_not_called()
 
@@ -743,14 +696,19 @@ class TestKubernetesHugePagesPatchCharmLib(unittest.TestCase):
         ]
         patch_pod_is_patched.return_value = False
         patch_statefulset_is_patched.return_value = False
-        harness = Harness(_TestCharmNoVolumes)
-        self.addCleanup(harness.cleanup)
-        harness.begin()
 
-        harness.charm.on.hugepages_volumes_config_changed.emit()
+        kubernetes_volumes = KubernetesHugePagesPatchCharmLib(
+            namespace="whatever-ns",
+            statefulset_name=STATEFULSET_NAME,
+            pod_name="whatever-pod",
+            container_name=CONTAINER_NAME,
+            hugepages_volumes=[],
+        )
+
+        kubernetes_volumes.configure()
 
         patch_replace_statefulset.assert_called_with(
-            statefulset_name=harness.charm.app.name,
+            statefulset_name=STATEFULSET_NAME,
             container_name=CONTAINER_NAME,
             requested_volumes=[],
             requested_volumemounts=[],
@@ -820,14 +778,25 @@ class TestKubernetesHugePagesPatchCharmLib(unittest.TestCase):
         ]
         patch_pod_is_patched.return_value = False
         patch_statefulset_is_patched.return_value = False
-        harness = Harness(_TestCharmAddVolumes)
-        self.addCleanup(harness.cleanup)
-        harness.begin()
 
-        harness.charm.on.hugepages_volumes_config_changed.emit()
+        kubernetes_volumes = KubernetesHugePagesPatchCharmLib(
+            namespace="whatever-ns",
+            statefulset_name=STATEFULSET_NAME,
+            pod_name="whatever-pod",
+            container_name=CONTAINER_NAME,
+            hugepages_volumes=[
+                HugePagesVolume(
+                    mount_path="/dev/hugepages",
+                    size="1Gi",
+                    limit="4Gi",
+                )
+            ],
+        )
+
+        kubernetes_volumes.configure()
 
         patch_replace_statefulset.assert_called_with(
-            statefulset_name=harness.charm.app.name,
+            statefulset_name=STATEFULSET_NAME,
             container_name=CONTAINER_NAME,
             requested_volumes=expected_volumes,
             requested_volumemounts=expected_volumemounts,
@@ -910,14 +879,24 @@ class TestKubernetesHugePagesPatchCharmLib(unittest.TestCase):
         ]
         patch_pod_is_patched.return_value = False
         patch_statefulset_is_patched.return_value = False
-        harness = Harness(_TestCharmAddVolumes)
-        self.addCleanup(harness.cleanup)
-        harness.begin()
+        kubernetes_volumes = KubernetesHugePagesPatchCharmLib(
+            namespace="whatever-ns",
+            statefulset_name=STATEFULSET_NAME,
+            pod_name="whatever-pod",
+            container_name=CONTAINER_NAME,
+            hugepages_volumes=[
+                HugePagesVolume(
+                    mount_path="/dev/hugepages",
+                    size="1Gi",
+                    limit="4Gi",
+                )
+            ],
+        )
 
-        harness.charm.on.hugepages_volumes_config_changed.emit()
+        kubernetes_volumes.configure()
 
         patch_replace_statefulset.assert_called_with(
-            statefulset_name=harness.charm.app.name,
+            statefulset_name=STATEFULSET_NAME,
             container_name=CONTAINER_NAME,
             requested_volumes=expected_volumes + current_volumes,
             requested_volumemounts=expected_volumemounts + current_volumemounts,
@@ -928,44 +907,59 @@ class TestKubernetesHugePagesPatchCharmLib(unittest.TestCase):
     def test_given_hugepages_when_generate_resources_then_hugepages_resources_are_correctly_generated(  # noqa: E501
         self,
     ):
-        harness = Harness(_TestCharmAddVolumes)
-        self.addCleanup(harness.cleanup)
-        harness.begin()
-        generated_resources = (
-            harness.charm.kubernetes_volumes._generate_resource_requirements_from_requested_hugepage()  # noqa: E501
+        kubernetes_volumes = KubernetesHugePagesPatchCharmLib(
+            namespace="whatever-ns",
+            statefulset_name=STATEFULSET_NAME,
+            pod_name="whatever-pod",
+            container_name=CONTAINER_NAME,
+            hugepages_volumes=[
+                HugePagesVolume(
+                    mount_path="/dev/hugepages",
+                    size="1Gi",
+                    limit="4Gi",
+                )
+            ],
         )
 
-        self.assertEqual(
-            generated_resources,
-            ResourceRequirements(
-                limits={
-                    "hugepages-1Gi": "4Gi",
-                    "cpu": "2",
-                },
-                requests={
-                    "hugepages-1Gi": "4Gi",
-                    "cpu": "2",
-                },
-            ),
+        generated_resources = (
+            kubernetes_volumes._generate_resource_requirements_from_requested_hugepage()  # noqa: E501
+        )
+
+        assert generated_resources == ResourceRequirements(
+            limits={
+                "hugepages-1Gi": "4Gi",
+                "cpu": "2",
+            },
+            requests={
+                "hugepages-1Gi": "4Gi",
+                "cpu": "2",
+            },
         )
 
     @patch("lightkube.core.client.GenericSyncClient", new=Mock)
     def test_given_hugepages_when_generate_volumes_then_hugepages_volumes_are_correctly_generated(
         self,
     ):
-        harness = Harness(_TestCharmAddVolumes)
-        self.addCleanup(harness.cleanup)
-        harness.begin()
-        generated_volumes = (
-            harness.charm.kubernetes_volumes._generate_volumes_from_requested_hugepage()
-        )
-
-        self.assertEqual(
-            generated_volumes,
-            [
-                Volume(
-                    name="hugepages-1gi",
-                    emptyDir=EmptyDirVolumeSource(medium="HugePages-1Gi"),
+        kubernetes_volumes = KubernetesHugePagesPatchCharmLib(
+            namespace="whatever-ns",
+            statefulset_name=STATEFULSET_NAME,
+            pod_name="whatever-pod",
+            container_name=CONTAINER_NAME,
+            hugepages_volumes=[
+                HugePagesVolume(
+                    mount_path="/dev/hugepages",
+                    size="1Gi",
+                    limit="4Gi",
                 )
             ],
         )
+        generated_volumes = (
+            kubernetes_volumes._generate_volumes_from_requested_hugepage()
+        )
+
+        assert generated_volumes == [
+            Volume(
+                name="hugepages-1gi",
+                emptyDir=EmptyDirVolumeSource(medium="HugePages-1Gi"),
+            )
+        ]
