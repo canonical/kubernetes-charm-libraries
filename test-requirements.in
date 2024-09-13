@@ -1,7 +1,5 @@
 codespell
 coverage[toml]
-juju==3.5.2.0
 pyright
 pytest
-pytest-operator
 ruff
