@@ -16,9 +16,9 @@ packaging==24.1
     # via pytest
 pluggy==1.5.0
     # via pytest
-pyright==1.1.380
+pyright==1.1.381
     # via -r test-requirements.in
 pytest==8.3.3
     # via -r test-requirements.in
-ruff==0.6.5
+ruff==0.6.7
     # via -r test-requirements.in
