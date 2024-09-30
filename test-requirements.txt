@@ -16,9 +16,11 @@ packaging==24.1
     # via pytest
 pluggy==1.5.0
     # via pytest
-pyright==1.1.381
+pyright==1.1.382.post1
     # via -r test-requirements.in
 pytest==8.3.3
     # via -r test-requirements.in
-ruff==0.6.7
+ruff==0.6.8
     # via -r test-requirements.in
+typing-extensions==4.12.2
+    # via pyright
