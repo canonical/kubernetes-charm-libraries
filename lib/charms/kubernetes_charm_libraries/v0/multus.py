@@ -609,16 +609,16 @@ class KubernetesMultusCharmLib:
     ):
         """Create instance of the KubernetesMultusCharmLib.
 
-       Args:
-           network_attachment_definitions: list of `NetworkAttachmentDefinition` to be created.
-           network_annotations: List of `NetworkAnnotation` to be added to the container.
-           namespace: Kubernetes namespace
-           statefulset_name: Statefulset name
-           pod_name: Pod name
-           container_name: Container name
-           cap_net_admin: Container requires NET_ADMIN capability
-           privileged: Container requires privileged security context
-       """
+        Args:
+            network_attachment_definitions: list of `NetworkAttachmentDefinition` to be created.
+            network_annotations: List of `NetworkAnnotation` to be added to the container.
+            namespace: Kubernetes namespace
+            statefulset_name: Statefulset name
+            pod_name: Pod name
+            container_name: Container name
+            cap_net_admin: Container requires NET_ADMIN capability
+            privileged: Container requires privileged security context
+        """
         self.namespace = namespace
         self.statefulset_name = statefulset_name
         self.pod_name = pod_name
