@@ -9,3 +9,15 @@ bases:
     run-on:
     - name: ubuntu
       channel: "22.04"
+
+parts:
+  charm:
+    source: .
+    plugin: charm
+    charm-requirements:
+      - requirements.txt
+    build-snaps:
+      - astral-uv
+    override-build: |
+      uv export --frozen --no-dev -o requirements.txt
+      craftctl default

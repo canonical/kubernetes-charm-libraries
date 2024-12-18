@@ -1,3 +1,25 @@
+[project]
+name = "kubernetes-charm-libraries"
+version = "0.1.0"
+requires-python = ">=3.10"
+
+dependencies = [
+    "ops",
+    "lightkube",
+    "lightkube-models",
+]
+
+[dependency-groups]
+test = [
+    "coverage[toml]",
+    "pytest",
+]
+dev = [
+    "codespell",
+    "pyright",
+    "ruff",
+]
+
 # Testing tools configuration
 [tool.coverage.run]
 branch = true
