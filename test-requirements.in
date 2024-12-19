@@ -1,5 +1,0 @@
-codespell
-coverage[toml]
-pyright
-pytest
-ruff
