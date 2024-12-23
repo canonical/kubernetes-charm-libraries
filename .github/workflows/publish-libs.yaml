@@ -8,7 +8,7 @@ on:
 
 jobs:
   multus-lib-needs-publishing:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     outputs:
       needs-publishing: ${{ steps.changes.outputs.multus }}
     steps:
@@ -30,7 +30,7 @@ jobs:
     secrets: inherit
 
   hugepages-lib-needs-publishing:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     outputs:
       needs-publishing: ${{ steps.changes.outputs.hugepages }}
     steps:
