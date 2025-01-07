@@ -46,7 +46,8 @@ class YourCharm(CharmBase):
 
 import logging
 from dataclasses import dataclass
-from typing import Iterable, List
+from subprocess import check_output
+from typing import Iterable, Iterator, List, Optional
 
 from lightkube.core.client import Client
 from lightkube.core.exceptions import ApiError
@@ -59,7 +60,7 @@ from lightkube.models.core_v1 import (
     VolumeMount,
 )
 from lightkube.resources.apps_v1 import StatefulSet
-from lightkube.resources.core_v1 import Pod
+from lightkube.resources.core_v1 import Node, Pod
 
 # The unique Charmhub library identifier, never change it
 LIBID = "b4cf8e58c9f64b73b22083d3e8d0de8e"
@@ -69,7 +70,9 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 6
+LIBPATCH = 7
+
+REQUIRED_CPU_EXTENSIONS_HUGEPAGES = ["pdpe1gb"]
 
 logger = logging.getLogger(__name__)
 
@@ -410,6 +413,17 @@ class KubernetesClient:
         )
         return container.resources  # type: ignore[return-value]
 
+    def list_nodes(self) -> Optional[Iterator[Node]]:
+        """Return K8s cluster nodes."""
+        try:
+            return self.client.list(Node)
+        except ApiError as e:
+            if e.status.reason == "Unauthorized":
+                logger.debug("kube-apiserver not ready yet")
+                return None
+            else:
+                raise KubernetesHugePagesVolumesPatchError("Could not get cluster nodes")
+
 
 class KubernetesHugePagesPatchCharmLib:
     """Class to be instantiated by charms requiring changes in HugePages volumes."""
@@ -431,6 +445,15 @@ class KubernetesHugePagesPatchCharmLib:
             container_name: Container name
             pod_name: Pod name
         """
+        if not all(
+            required_extension in self._get_cpu_extensions()
+            for required_extension in REQUIRED_CPU_EXTENSIONS_HUGEPAGES
+        ):
+            raise KubernetesHugePagesVolumesPatchError(
+                f"Current CPU doesn't support required extensions: {REQUIRED_CPU_EXTENSIONS_HUGEPAGES}"  # noqa: E501
+            )
+        if not self._hugepages_are_available():
+            raise KubernetesHugePagesVolumesPatchError("Not enough HugePages available")
         self.statefulset_name = statefulset_name
         self.namespace = namespace
         self.kubernetes = KubernetesClient(namespace=self.namespace)
@@ -440,7 +463,7 @@ class KubernetesHugePagesPatchCharmLib:
 
     def configure(self):
         """Configure HugePages in the StatefulSet and container."""
-        if not self.is_patched():
+        if not self._is_patched():
             self.kubernetes.replace_statefulset(
                 statefulset_name=self.statefulset_name,
                 container_name=self.container_name,
@@ -448,6 +471,39 @@ class KubernetesHugePagesPatchCharmLib:
                 requested_volumemounts=self._generate_volumemounts_to_be_replaced(),
                 requested_resources=self._generate_resource_requirements_to_be_replaced(),
             )
+
+    def _is_patched(self) -> bool:
+        """Return whether statefulset and pod are patched.
+
+        Validates that the statefulset contains the appropriate volumes
+        and that the pod also contains the appropriate volume mounts and
+        resource requirements.
+
+        Returns:
+            bool: Whether statefulset and pod are patched.
+        """
+        volumes = self._generate_volumes_from_requested_hugepage()
+        statefulset_is_patched = self._statefulset_is_patched(volumes)
+        volumemounts = self._generate_volumemounts_from_requested_hugepage()
+        resource_requirements = (
+            self._generate_resource_requirements_from_requested_hugepage()
+        )
+        pod_is_patched = self._pod_is_patched(
+            requested_volumemounts=volumemounts,
+            requested_resources=resource_requirements,
+        )
+        return statefulset_is_patched and pod_is_patched
+
+    def _hugepages_are_available(self) -> bool:
+        """Check whether HugePages are available in the K8s nodes.
+
+        Returns:
+            bool: Whether HugePages are available in the K8s nodes
+        """
+        nodes = self.kubernetes.list_nodes()
+        if not nodes:
+            return False
+        return all(node.status.allocatable.get("hugepages-1Gi", "0") >= "2Gi" for node in nodes)  # type: ignore
 
     def _pod_is_patched(
         self,
@@ -504,28 +560,6 @@ class KubernetesHugePagesPatchCharmLib:
             statefulset_name=self.statefulset_name,
             requested_volumes=requested_volumes,
         )
-
-    def is_patched(self) -> bool:
-        """Return whether statefulset and pod are patched.
-
-        Validates that the statefulset contains the appropriate volumes
-        and that the pod also contains the appropriate volume mounts and
-        resource requirements.
-
-        Returns:
-            bool: Whether statefulset and pod are patched.
-        """
-        volumes = self._generate_volumes_from_requested_hugepage()
-        statefulset_is_patched = self._statefulset_is_patched(volumes)
-        volumemounts = self._generate_volumemounts_from_requested_hugepage()
-        resource_requirements = (
-            self._generate_resource_requirements_from_requested_hugepage()
-        )
-        pod_is_patched = self._pod_is_patched(
-            requested_volumemounts=volumemounts,
-            requested_resources=resource_requirements,
-        )
-        return statefulset_is_patched and pod_is_patched
 
     def _generate_volumes_from_requested_hugepage(self) -> list[Volume]:
         """Generate the list of required HugePages volumes.
@@ -591,6 +625,21 @@ class KubernetesHugePagesPatchCharmLib:
     def _limit_or_request_is_hugepages(key: str) -> bool:
         """Return whether the specified limit or request regards HugePages."""
         return key.startswith("hugepages")
+
+    @staticmethod
+    def _get_cpu_extensions() -> list[str]:
+        """Return a list of extensions (instructions) supported by the CPU.
+
+        Returns:
+            list: List of extensions (instructions) supported by the CPU.
+        """
+        cpu_info = check_output(["lscpu"]).decode().split("\n")
+        cpu_flags = []
+        for cpu_info_item in cpu_info:
+            if "Flags:" in cpu_info_item:
+                cpu_flags = cpu_info_item.split()
+                del cpu_flags[0]
+        return cpu_flags
 
     def _generate_volumes_to_be_replaced(self) -> list[Volume]:
         """Generate the list of new volumes to be replaced in the StatefulSet.
